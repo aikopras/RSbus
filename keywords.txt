@@ -1,0 +1,38 @@
+#########################################
+# Syntax Coloring Map For RSbus 
+#########################################
+
+#########################################
+# Datatypes (KEYWORD1)
+#########################################
+RSbusHardware	KEYWORD1
+RSbusConnection	KEYWORD1
+
+#########################################
+# Methods and Functions (KEYWORD2)
+#########################################
+attach	KEYWORD2
+detach	KEYWORD2
+checkPolling	KEYWORD2
+send4bits	KEYWORD2
+send8bits	KEYWORD2
+checkConnection	KEYWORD2
+
+masterIsSynchronised	KEYWORD2
+address	KEYWORD2
+needConnect	KEYWORD2
+type	KEYWORD2
+
+
+#########################################
+# Instances (KEYWORD2)
+#########################################
+
+
+#########################################
+# Constants (LITERAL1)
+#########################################
+Switch		LITERAL1
+Feedback	LITERAL1
+HighBits	LITERAL1
+LowBits		LITERAL1
