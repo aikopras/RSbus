@@ -1,6 +1,6 @@
 # RSbus #
 
-This library can be used to send feedback information from a decoder to the master station via the RS-bus. A RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128. The master polls all 128 addresses in a sequential order to ask if they have data to send. Per address 8 bits of feedback data can be send; individual feedback messages carry only 4 of these bits (a nibble), so 2 messages are needed to send all 8 bits. Note that this library supports multiple RS-bus addresses per decoder. For each address a separate RS-Bus connection should be established. 
+This Arduino library can be used to send feedback information from a decoder to the master station via the RS-bus. A RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128. The master polls all 128 addresses in a sequential order to ask if they have data to send. Per address 8 bits of feedback data can be send; individual feedback messages carry only 4 of these bits (a nibble), so 2 messages are needed to send all 8 bits. Note that this library supports multiple RS-bus addresses per decoder. For each address a separate RS-Bus connection should be established. 
 
 If no feedback module sends information, one complete polling cyclus takes 33,1 ms. On the other hand, if all feedback modules send information, one polling cyclus takes 33,1 + 128 * 1,875 = 273,1 ms. Since feedback modules can only send half of their data (one nibble) during one polling cyclus, roughly 550 ms may be needed to send 8 bits. 
 
@@ -46,3 +46,31 @@ Sends two 4 bit messages (nibbles) to the master station. Note that the data wil
 
 - ### checkConnection() ###
 Should be called as often as possible from the program's main loop. It maintains the connection logic and checks if data is waiting in the FIFO buffer. If data is waiting, it checks if the USART and RS-bus ISR are able to accept that data. The RS-bus ISR waits till its address is being polled by the master, and once it gets polled sends the RS-bus message (carrying 4 bits of feedback data) to the master. 
+
+# Details #
+
+    enum Decoder_t { Switch, Feedback };
+    enum Nibble_t  { HighBits, LowBits };
+    
+    class RSbusHardware {
+      public:
+        uint8_t masterIsSynchronised;
+      
+        RSbusHardware();
+        void attach(int tx_pin, int rx_pin);
+        void detach(void);
+        void checkPolling(void); 
+    }
+
+
+    class RSbusConnection {
+      public:
+        uint8_t address;
+        uint8_t needConnect;
+        Decoder_t type;
+
+        RSbusConnection();
+        void send4bits(Nibble_t nibble, uint8_t value);
+        void send8bits(uint8_t value);
+        void checkConnection(void);
+    }
