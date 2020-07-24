@@ -1,6 +1,8 @@
 # RSbus #
 
-This Arduino library can be used to send feedback information from a decoder to the master station via the RS-bus. A RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128. The master polls all 128 addresses in a sequential order to ask if they have data to send. Per address 8 bits of feedback data can be send; individual feedback messages carry only 4 of these bits (a nibble), so 2 messages are needed to send all 8 bits. Note that this library supports multiple RS-bus addresses per decoder. For each address a separate RS-Bus connection should be established. 
+This Arduino library can be used to send feedback information from a decoder to the master station via the (LENZ) RS-bus. For more information on the RS-bus see the [der-moba wbesite](http://www.der-moba.de/index.php/RS-Rückmeldebus) (in German) and [https://sites.google.com/site/dcctrains/rs-bus-feed](https://sites.google.com/site/dcctrains/rs-bus-feed).
+
+The RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128. The master polls all 128 addresses in a sequential order to ask if they have data to send. Per address 8 bits of feedback data can be send; individual feedback messages carry only 4 of these bits (a nibble), so 2 messages are needed to send all 8 bits. Note that this library supports multiple RS-bus addresses per decoder. For each address a separate RS-Bus connection should be established. 
 
 If no feedback module sends information, one complete polling cyclus takes 33,1 ms. On the other hand, if all feedback modules send information, one polling cyclus takes 33,1 + 128 * 1,875 = 273,1 ms. Since feedback modules can only send half of their data (one nibble) during one polling cyclus, roughly 550 ms may be needed to send 8 bits. 
 
@@ -74,3 +76,8 @@ Should be called as often as possible from the program's main loop. It maintains
         void send8bits(uint8_t value);
         void checkConnection(void);
     }
+
+# Printed Circuit Boards (PCBs) #
+The schematics and PCBs are available from my EasyEda homepage [EasyEda homepage](https://easyeda.com/aikopras),
+* [RS-Bus piggy-back print](https://easyeda.com/aikopras/rs-bus-tht)
+* [SMD version of the RS-Bus piggy-back print](https://easyeda.com/aikopras/rs-bus-smd)
