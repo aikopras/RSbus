@@ -113,7 +113,7 @@
 // The rsUSART object is declared in "support_usart.cpp" and sends messages to the master. 
 extern volatile RSbusIsr rsISR;  // Defined in support_isr
 extern USART rsUSART;            // Defined in support_usart. We will only use the init() methoud
-RSbusHardware rsbus_harware;     // The object that checks the timing of RS-bus events
+RSbusHardware rsbus_hardware;    // The object that checks the timing of RS-bus events
 
 
 //******************************************************************************************************
@@ -303,7 +303,7 @@ uint8_t RSbusConnection::sendNibble(void) {
 
 void RSbusConnection::checkConnection(void) {
   // This function maintains the statemachine for the RS-bus connection, and should be called from main frequestly
-  if (rsbus_harware.masterIsSynchronised) {    // The decoder has detected the start of a new polling cyclus
+  if (rsbus_hardware.masterIsSynchronised) {   // The decoder has detected the start of a new polling cyclus
     switch (status) {
       case NotConnected : 
         status = ConnectionIsNeeded;           // status is used for our internal (private) statemachine
