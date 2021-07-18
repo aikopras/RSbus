@@ -4,6 +4,7 @@
 // purpose:   Support file for the RS-bus library. Initialise the USART,
 //            and return a pointer to the USART data register being used
 // history:   2019-01-30 ap V0.1 Initial version
+//            2021-07-16 ap V0.2 Changed the way the USART is selected
 //
 // This source file is subject of the GNU general public license 2,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -15,12 +16,37 @@
 // - 14  => Serial3  - MEGA
 // - 9   => TXD      - Mightycore - ATmega 8535/16/32
 // - 9   => TXD0     - Mightycore - ATmega 164/324/644/1284
-// - 11  => TXD1     - Mightycore - ATmega 164/324/644/1284 
+// - 11  => TXD1     - Mightycore - ATmega 164/324/644/1284
 //
-// Based on the tx_pin value of the USART::init() function, the selected USART registers will be set.
-// Adter initialisation, "dataRegister" will point to UDR, UDR0, UDR1, UDR2 or UDR3
+//
+// BEGIN OF 2021/07 EDIT
+//
+// 
+//
+// The MegaCoreX support the following USART pins:
+// Note: The Pin names are the same for 28, 32, 40 and 48 pin housings
+// MegaCoreX 48Pin: 809/1609/3209/4809
+// MegaCoreX 40Pin: 4809
+// MegaCoreX 32Pin: 808/1608/3208/4808
+// MegaCoreX 28Pin: 808/1608/3208/4808
+// PAO => TXD0       48Pin / 40Pin / 32Pin / 28Pin
+// PA4 => TXD0 AlT   48Pin / 40Pin / 32Pin / 28Pin
+// PC0 => TXD1       48Pin / 40Pin / 32Pin / 28Pin
+// PC4 => TXD1 ALT   48Pin / 40Pin
+// PF0 => TXD2       48Pin / 40Pin / 32Pin / 28Pin
+// PF4 => TXD2 ALT   48Pin / 40Pin / 32Pin
+// PB0 => TXD3       48Pin
+// PB4 => TXD3 ALT   48Pin
+//
+// Note: See the pins_arduino.h files for the various variants. Example:
+// https://github.com/MCUdude/MegaCoreX/blob/master/megaavr/variants/48pin-standard/pins_arduino.h
+//
+// END OF 2021/07 EDIT
+
+// Based on the usartNumber parameter, the associated USART registers will be set.
+// After initialisation, "dataRegister" will point to UDR, UDR0, UDR1, UDR2 or UDR3
 // and data bytes can be send as follows: (*rsUSART.dataRegister) = data_byte; 
-// If we use an incorrect pin value, "dataRegister" will point to a dummy variable
+// If we use an incorrect usartNumber, "dataRegister" will point to a dummy variable
 //
 //******************************************************************************************************
 #include <Arduino.h>
@@ -36,7 +62,7 @@ USART::USART(void) {
   dataRegister = &dummy_byte;
 }
 
-void USART::init(int tx_pin) {
+void USART::init(uint8_t usartNumber) {
   // Messages should be: 8 bit, no parity, 1 stop bit, asynchronous mode, 4800 baud.
   // Step 1: Define which baudrate will be used
   // Step 2: Initialise USART Control and Status Register B
@@ -49,17 +75,25 @@ void USART::init(int tx_pin) {
   #define USART_BAUDRATE 4800
   #define BAUD_PRESCALE ((((F_CPU / 16) + (USART_BAUDRATE / 2)) / (USART_BAUDRATE)) - 1)
   
-  if (tx_pin == 1) {               // USART 0 on all Arduino boards
-    #ifdef UDR0 
+  if (usartNumber == 0) {          // USART 0 on all Arduino boards
+    #ifdef UDR                     // ATmega 8535/16/32
+    dataRegister = &UDR;
+    UCSRB |= (1 << TXEN);          // Control and Status Register B
+    UCSRC |= (1 << URSEL)          // Register C. Use URSEL bit!
+          |  (1 << UCSZ0)          // Character size bit 0
+          |  (1 << UCSZ1);         // Character size bit 1
+    UBRRL  = BAUD_PRESCALE;        // Load lower 8-bits of the baud rate value
+    UBRRH = (BAUD_PRESCALE >> 8);  // Load upper 8-bits of the baud rate
+    #elif defined (UDR0)           // The standard `old` ATmeg boards
     dataRegister = &UDR0;
     UCSR0B |= (1 << TXEN0);        // Turn on transmission (but not reception!) circuiyty
-    UCSR0C |= (1 << UCSZ00)        // Use 8 bit 
-           |  (1 << UCSZ01);       // 
+    UCSR0C |= (1 << UCSZ00)        // Use 8 bit
+           |  (1 << UCSZ01);       //
     UBRR0L  = BAUD_PRESCALE;       // Load lower 8-bits of the baud rate value
     UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
     #endif
   }
-  else if (tx_pin == 18) {         // USART 1 on ATMega
+  else if (usartNumber == 1) {     // USART 1 on standard `old` ATmeg boards
     #ifdef UDR1 
     dataRegister = &UDR1;
     UCSR1B |= (1 << TXEN1);        // Turn on transmission (but not reception!) circuiyty
@@ -69,7 +103,7 @@ void USART::init(int tx_pin) {
     UBRR1H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
     #endif
   }
-  else if (tx_pin == 16) {         // USART 2 on ATMega
+  else if (usartNumber == 2) {     // USART 2 on standard `old` ATmeg boards
     #ifdef UDR2 
     dataRegister = &UDR2;
     UCSR2B |= (1 << TXEN2);        // Turn on transmission (but not reception!) circuiyty
@@ -79,7 +113,7 @@ void USART::init(int tx_pin) {
     UBRR2H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
     #endif
   }
-  else if (tx_pin == 14) {         // USART 3 on ATMega
+  else if (usartNumber == 3) {     // USART 3 on standard `old` ATmeg boards
     #ifdef UDR3 
     dataRegister = &UDR3;
     UCSR3B |= (1 << TXEN3);        // Turn on transmission (but not reception!) circuiyty
@@ -87,36 +121,6 @@ void USART::init(int tx_pin) {
            |  (1 << UCSZ31);       // 
     UBRR3L  = BAUD_PRESCALE;       // Load lower 8-bits of the baud rate value
     UBRR3H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
-    #endif
-  }
-  else if (tx_pin == 9) {          // USART 0 on Mightycore
-    #ifdef UDR 
-    // ATmega 8535/16/32
-    dataRegister = &UDR;
-    UCSRB |= (1 << TXEN);          // Control and Status Register B
-    UCSRC |= (1 << URSEL)          // Register C. Use URSEL bit!
-          |  (1 << UCSZ0)          // Character size bit 0
-          |  (1 << UCSZ1);         // Character size bit 1
-    UBRRL  = BAUD_PRESCALE;        // Load lower 8-bits of the baud rate value
-    UBRRH = (BAUD_PRESCALE >> 8);  // Load upper 8-bits of the baud rate
-   #elif defined (UDR0)
-    // ATmega 164/324/644/1284
-    dataRegister = &UDR0;
-    UCSR0B |= (1 << TXEN0);        // Turn on transmission (but not reception!) circuiyty
-    UCSR0C |= (1 << UCSZ00)        // Use 8 bit 
-           |  (1 << UCSZ01);       // 
-    UBRR0L  = BAUD_PRESCALE;       // Load lower 8-bits of the baud rate value
-    UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
-    #endif
-  }
- else if (tx_pin == 11) {          // USART 1 on Mightycore (ATmega 164/324/644/1284)
-    #ifdef UDR1 
-    dataRegister = &UDR1;
-    UCSR1B |= (1 << TXEN1);        // Turn on transmission (but not reception!) circuiyty
-    UCSR1C |= (1 << UCSZ10)        // Use 8 bit 
-           |  (1 << UCSZ11);       // 
-    UBRR1L  = BAUD_PRESCALE;       // Load lower 8-bits of the baud rate value
-    UBRR1H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate
     #endif
   }
 }

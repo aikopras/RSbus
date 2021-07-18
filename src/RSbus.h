@@ -11,6 +11,7 @@
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
 //
 // history:   2019-02-10 ap V1.0.1 Initial version
+//            2021-07-18 ap V1.1   USART can now be selected with number: 0, 1, 2 ...
 //
 //
 // This library can be used to send feedback information from a decoder to the master station
@@ -37,12 +38,14 @@
 // The RSbusHardware class initialises the USART for sending the RS-bus messages, and the 
 // Interrupt Service Routine (ISR) used for receiving the RS-bus pulses send by the master
 // to poll each decoder if it has data to send.
-// Most AVRs have a single USART, but the ATMega 162, 164 and 644 have two, while the
-// 1280 and 2560 have four USARTs. By specifying the tx_pin, the choice which USART will
-// be used is made implicitly.
+// Most AVRs have a single USART, but the ATMega 162, 164 and 644 have 2, while the
+// 1280 and 2560 as well as newer AtMegaX controllers (such as 4809, 128DA) have 4 USARTs.
+// To specify which USART to use a parameter exists in the attach function.
+// Take care with traditional Arduino's (such as the UNO and Nano) that may want to use
+// their single USART also for communication with the Arduino monitor.
 //
 // attach()
-// Should be called at the start of the program to connect the TX pin to the USART and
+// Should be called at the start of the program to select the USART and connect
 // the RX pin to the RS-bus Interrupt Service Routine (ISR).
 //
 // detach()
@@ -122,8 +125,8 @@ class RSbusHardware {
     uint8_t masterIsSynchronised;       // Flag: decoder has detected the start of a new polling cyclus 
 
     void attach(                        // configures the RS-bus ISR and USART
-      int tx_pin,                       // pin used for sending, using the USART
-      int rx_pin                        // pin used for receiving, must be an INT pin
+      uint8_t usartNumber,              // usart for sending (0..4)
+      uint8_t rx_pin                    // pin used for receiving, must be an INT pin
     );
     
     void detach(void);                  // stops the RS-bus ISR

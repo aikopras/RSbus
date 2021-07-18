@@ -134,14 +134,14 @@ RSbusHardware::RSbusHardware() {
   masterIsSynchronised = 0;  // No begin of next polling cyclus detected yet
 }
 
-void RSbusHardware::attach(int tx_pin, int rx_pin) {
+void RSbusHardware::attach(uint8_t usartNumber, uint8_t rx_pin) {
   // Step 1: attach the interrupt to the RSBUS_RX pin.
   // Triggering on the falling edge allows immediate sending after the right number of pulses
   attachInterrupt(digitalPinToInterrupt(rx_pin), rs_interrupt, FALLING );
   // Store the pin number, to allow a detach later
   rx_pin_used = rx_pin;
   // STEP 2: initialise the RS bus hardware
-  rsUSART.init(tx_pin);
+  rsUSART.init(usartNumber);
 }
 
 void RSbusHardware::detach(void) {
