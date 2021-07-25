@@ -12,9 +12,6 @@
 // 2021-07-17 / AP: Typo (harware => hardware)
 //                  USART selection no longer based on Arduino Pin, but on USART number
 //
-// TODO: Check if connection to the master station works well. Last tests (July 2020) 
-// with novel 2560-based decoder didn't seem to work 
-//
 //******************************************************************************************************
 #include <Arduino.h>
 #include <RSbus.h>

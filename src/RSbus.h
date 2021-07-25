@@ -14,13 +14,21 @@
 //            2021-07-18 ap V1.1   USART can now be selected with number: 0, 1, 2 ...
 //
 //
-// This library can be used to send feedback information from a decoder to the master station
-// via the RS-bus. A RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128.
-// The master polls all 128 addresses in a sequential order to ask if they have data to send.
-// Per address 8 bits of feedback data can be send; individual feedback messages carry only
-// 4 of these bits (a nibble), so 2 messages are needed to send all 8 bits.
-// Note that this library supports multiple RS-bus addresses per decoder. For each address
-// a separate RS-Bus connection should be established.
+// This Arduino library can be used to send feedback information from a decoder to the master
+// station via the (LENZ) RS-bus. The RS-bus is the standard feedback bus used for Lenz products,
+// and supported by several other vendors. As opposed to some other feedback systems, the RS-Bus
+// uses current (instead of voltage) signalling, making the transmission less susceptible to
+// noise and interference. RS-Bus packets also include a parity bit to provide some form of error
+// detection. For more information on the RS-bus see:
+// - http://www.der-moba.de/index.php/RS-Rückmeldebus (in German),
+// - https://sites.google.com/site/dcctrains/rs-bus-feed
+//
+// The RS-bus supports a maximum of 128 feedback addresses, numbered 1 to 128. The master polls
+// all 128 addresses in a sequential order to ask if they have data to send. Per address 8 bits
+// of feedback data can be send; individual feedback messages carry only 4 of these bits (a
+// nibble), so 2 messages are needed to send all 8 bits. Note that this library supports multiple
+// RS-bus addresses per decoder. For each address a separate RS-Bus connection should be
+// established.
 //
 // If no feedback module sends information, one complete polling cyclus takes 33,1 ms.
 // On the other hand, if all feedback modules send information, one polling cyclus takes
@@ -29,7 +37,7 @@
 //
 // Used hardware and software:
 // - INTx (an interrupt pin): used to receive RS-bus polling pulses from the command station
-// - TXD/TXDx (the/an USART): used to send RS-bus messages to the command station
+// - TXD/TXDx (a USART): used to send RS-bus messages to the command station
 // - the Arduino micros() function
 //
 //
@@ -67,7 +75,7 @@
 // For each address this decoder will use, a dedicated RSbusConnection object should be created by
 // the main program. To connect to the master station, each RSbusConnection object should start with 
 // sending all 8 feedback bits to the master. Since RS_bus messages carry only 4 bits of user data
-// (a nibble), the 8 bits will be split in 4 low and 4 high bits and send in two consequetive messages. 
+// (a nibble), the 8 bits will be split in 4 low and 4 high bits and send in two consecutive messages.
 //
 // address
 // The address used by this RS-bus connection object. Valid values are: 1..128 
@@ -80,12 +88,15 @@
 // and never use send4bits() for sending only part of our feedback bits.
 //
 // type
-// A variable that specifies the type of decoder. The default value is Switch, but this may be
-// changed to Feedback. Note that RS-bus messages do contain two bits to specify this decoder
-// type, but there is no evidence that these bits are actually being used by the master. 
-// Therefore the "type" can be set via this library for completeness, but an incorrect value
-// will (most likely) not lead to any negative effect.
-
+// A variable that specifies the type of decoder. The default value is `Switching receiver with
+// feedback decoder`, but this may be changed into `Stand-alone feedback decoder`. The decoder
+// type is conveyed in the RS-bus messages towards the master, which in turn will forward this
+// information on request of a handheld device, such as the LH100, or PC software, such as
+// traincontroller. In case of switch decoders, handhelds use the type information to display
+// to the user the current switch position and that the switch is feedback capable. In case of
+// feedback decoders, handhelds use the type information to display to the user the value of the
+// feedback bits (see the LH100 manual for details).
+//
 // send4bits()
 // Sends a single 4 bit message (nibble) to the master station. We have to specify whether the 
 // high or low order bits are being send. 
