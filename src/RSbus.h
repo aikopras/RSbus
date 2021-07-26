@@ -17,9 +17,9 @@
 // This Arduino library can be used to send feedback information from a decoder to the master
 // station via the (LENZ) RS-bus. The RS-bus is the standard feedback bus used for Lenz products,
 // and supported by several other vendors. As opposed to some other feedback systems, the RS-Bus
-// uses current (instead of voltage) signalling, making the transmission less susceptible to
-// noise and interference. RS-Bus packets also include a parity bit to provide some form of error
-// detection. For more information on the RS-bus see:
+// implements a current loop (instead of voltage levels) for signalling, making the transmission
+// less susceptible to noise and interference. RS-Bus packets also include a parity bit to provide
+// some form of error detection. For more information on the RS-bus see:
 // - http://www.der-moba.de/index.php/RS-Rückmeldebus (in German),
 // - https://sites.google.com/site/dcctrains/rs-bus-feed
 //
@@ -88,8 +88,9 @@
 // and never use send4bits() for sending only part of our feedback bits.
 //
 // type
-// A variable that specifies the type of decoder. The default value is `Switching receiver with
-// feedback decoder`, but this may be changed into `Stand-alone feedback decoder`. The decoder
+
+// A variable that specifies the type of decoder. The default value is 'Stand-alone feedback 
+// decoder', but this may be changed into 'Switching receiver with feedback decoder'. The decoder
 // type is conveyed in the RS-bus messages towards the master, which in turn will forward this
 // information on request of a handheld device, such as the LH100, or PC software, such as
 // traincontroller. In case of switch decoders, handhelds use the type information to display
