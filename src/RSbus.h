@@ -12,6 +12,7 @@
 //
 // history:   2019-02-10 ap V1.0.1 Initial version
 //            2021-07-18 ap V1.1   USART can now be selected with number: 0, 1, 2 ...
+//            2021-07-26 ap v1.1.2 Default type is now 'Feedback decoder'
 //
 //
 // This Arduino library can be used to send feedback information from a decoder to the master
