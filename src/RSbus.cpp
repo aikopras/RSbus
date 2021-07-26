@@ -203,13 +203,16 @@ const uint8_t PARITY    = 0;      // parity bit; will be calculated by software
   
 
 RSbusConnection::RSbusConnection() {
-  // Note: the following kind of RS-bus modules exist (see also http://www.der-moba.de/):
+  // The following kind of RS-bus modules exist (see also http://www.der-moba.de/):
   // - 0: accessory decoder without feedback
-  // - 1: accessory decoder with RS-Bus feedback (this would be the default case)
-  // - 2: feedback module for the RS-Bus (can not switch anything)
+  // - 1: accessory decoder with RS-Bus feedback
+  // - 2: feedback module for the RS-Bus (Default)
   // - 3: Reserved for future use
+  // The 'type' is also conveyed in XpressNet response messages, and used for example
+  // by handhelds to indicate if a switch has feedback capabilities or if the feedback
+  // decoder is connected to the master station.
   address = 0;                                 // Initialise to 0
-  type = Switch;                               // Default value
+  type = Feedback;                             // Default value
   status = NotConnected;                       // state machine starts NotConnected
   needConnect = 0;                             // Initialise to 0
 }
