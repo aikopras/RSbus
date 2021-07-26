@@ -8,6 +8,7 @@
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
 //
 // history:   2019-02-10 ap V0.1 Initial version
+//            2021-07-26 ap v0.2 Default type is now 'Feedback decoder'
 //
 //
 // This library can be used to send feedback information from decoder to master station via
