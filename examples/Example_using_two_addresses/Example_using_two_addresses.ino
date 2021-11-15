@@ -26,7 +26,7 @@ const uint8_t RS_Address2 = 99;      // Must be a value between 1..128
 // Instatiate the objects being used
 // The RSbushardware object is responsible for the RS-Bus ISR and USART.
 // The RSbusConnection object maintains the data channel with the master and formats the messages 
-extern RSbusHardware rsbus_hardware; // This object is defined in rs_bus.cpp
+extern RSbusHardware rsbusHardware;  // This object is defined in rs_bus.cpp
 RSbusConnection rsbus1;              // Per RS-Bus address we need a dedicated object
 RSbusConnection rsbus2;              // We use two RS-Bus addresses
 unsigned long T_last;                // For testing: we send 1 message per second
@@ -37,7 +37,7 @@ uint8_t nubbleNumber;                // We send the four nibbles one after the o
 
 void setup() {
   pinMode(ledPin, OUTPUT);
-  rsbus_hardware.attach(RsBus_USART, RsBus_RX);
+  rsbusHardware.attach(RsBus_USART, RsBus_RX);
   rsbus1.address = RS_Address1;      // 1.. 128
   rsbus2.address = RS_Address2;      // 1.. 128
   nubbleNumber = 1;
@@ -49,7 +49,7 @@ void loop() {
   // For testing purposes we try every second to send 8 bits (2 messages)
   if ((millis() - T_last) > 1000) {
     T_last = millis();
-    if (rsbus_hardware.masterIsSynchronised) {
+    if (rsbusHardware.masterIsSynchronised) {
       digitalWrite(ledPin, 1);
       if (nubbleNumber == 1) rsbus1.send4bits(LowBits, value);
       if (nubbleNumber == 2) rsbus2.send4bits(LowBits, value);
@@ -78,7 +78,7 @@ void loop() {
   // If a RS-Bus feedback decoder starts, it needs to connect to the master station
   if (rsbus1.needConnect) rsbus1.send8bits(0);
   if (rsbus2.needConnect) rsbus2.send8bits(0);
-  rsbus_hardware.checkPolling();     // Listen to RS-Bus polling messages for our turn
+  rsbusHardware.checkPolling();      // Listen to RS-Bus polling messages for our turn
   rsbus1.checkConnection();          // Check if the buffer contains data, and give this to the ISR and USART
   rsbus2.checkConnection();          // Check buffer for second address
 }

@@ -26,7 +26,7 @@ const uint8_t RS_Address = 100;      // Must be a value between 1..128
 // Instatiate the objects being used
 // The RSbushardware object is responsible for the RS-Bus ISR and USART.
 // The RSbusConnection object maintains the data channel with the master and formats the messages 
-extern RSbusHardware rsbus_hardware; // This object is defined in rs_bus.cpp
+extern RSbusHardware rsbusHardware;  // This object is defined in rs_bus.cpp
 RSbusConnection rsbus;               // Per RS-Bus address we need a dedicated object
 unsigned long T_last;                // For testing: we send 1 message per second
 uint8_t value;                       // The value we will send over the RS-Bus 
@@ -34,7 +34,7 @@ uint8_t nibble;                      // HighBits or LowBits
 
 
 void setup() {
-  rsbus_hardware.attach(RsBus_USART, RsBus_RX);
+  rsbusHardware.attach(RsBus_USART, RsBus_RX);
   rsbus.address = RS_Address;        // 1.. 128
   value = 0;                         // Initial value
   pinMode(ledPin, OUTPUT);
@@ -45,7 +45,7 @@ void loop() {
   // For testing purposes we try every second to send 8 bits (2 messages)
   if ((millis() - T_last) > 1000) {
     T_last = millis();
-    if (rsbus_hardware.masterIsSynchronised) {
+    if (rsbusHardware.masterIsSynchronised) {
       digitalWrite(ledPin, 1);       // We have a valid RS-Bus signal
       rsbus.send8bits(value);        // Tell the library to buffer these 8 bits for later sending
       switch (value) {
@@ -65,6 +65,6 @@ void loop() {
   // Next functions should be called from main as often as possible
   // If a RS-Bus feedback decoder starts, it needs to connect to the master station
   if (rsbus.needConnect) rsbus.send8bits(0);
-  rsbus_hardware.checkPolling();     // Listen to RS-Bus polling messages for our turn
+  rsbusHardware.checkPolling();      // Listen to RS-Bus polling messages for our turn
   rsbus.checkConnection();           // Check if the buffer contains data, and give this to the ISR and USART
 }

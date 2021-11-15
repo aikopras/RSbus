@@ -1,12 +1,12 @@
 //******************************************************************************************************
 //
-// file:      support_fifo.h
+// file:      sup_fifo.cpp
 // author:    Deisterholf / Aiko Pras
 // source:    https://github.com/deisterhold/Arduino-FIFO
 // history:   2019-01-30 V0.1 ap rewritten, to customize for the RS-bus purpose
 //
 // purpose:   FIFO functions to store RS-bus data
-//            
+//
 /*
  * FIFO Buffer
  * Implementation uses arrays to conserve memory
@@ -34,29 +34,51 @@
  * SOFTWARE.
  */
 //******************************************************************************************************
-#ifndef SUPPORT_FIFO_H
-#define SUPPORT_FIFO_H
-
 #include <Arduino.h>
+#include "sup_fifo.h"
 
-#define FIFO_SIZE 16
+FIFO::FIFO() {                     // This is the constructor
+  head = 0;
+  tail = 0;
+  numElements = 0;
+}
 
-class FIFO {
 
-public:
-  FIFO();
-  ~FIFO();
-  void empty();
-  void push(uint8_t data);
-  uint8_t pop();
-  uint8_t size();
+FIFO::~FIFO() {}                   // This is the destructor
 
-private:
-  uint8_t head;
-  uint8_t tail;
-  uint8_t numElements;
-  uint8_t buffer[FIFO_SIZE];
-  
-};
 
-#endif
+uint8_t FIFO::size() {return numElements;}
+
+
+void FIFO::push(uint8_t data) {
+  if(numElements == FIFO_SIZE) {return;}
+  else {
+    numElements++;                 // Increment size   
+    if(numElements > 1) {          // Only move the tail if there is more than one element
+      tail++;                      // Increment tail location     
+      tail %= FIFO_SIZE;           // Make sure tail is within the bounds of the array
+    }
+    buffer[tail] = data;           // Store data into array
+  }
+}
+
+
+uint8_t FIFO::pop() {
+  if(numElements == 0) {return 0;}
+  else {
+    numElements--;                 // Decrement size   
+    uint8_t data = buffer[head];   // Store the head of the queue in a temporary buffer
+    if(numElements >= 1) {
+      head++;                      // Move head up one position     
+      head %= FIFO_SIZE;           // Make sure head is within the bounds of the array
+    }
+    return data;
+  }
+}
+
+
+void FIFO::empty() {
+  head = 0;
+  tail = 0;
+  numElements = 0;
+}
