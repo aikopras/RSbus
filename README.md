@@ -62,7 +62,7 @@ A flag maintained by checkPolling() and used by objects from the RSbusConnection
 
 - #### bool interruptModeRising (default: true) ####
 Determines when the RS-bus ISR is triggered: at the RISING edge of the RS-bus polling signal or at the FALLING edge.
-Default is at the RISING edge. See See [the file BasicOperation-TriggerEdge.md](extras/BasicOperation-TriggerEdge.md) for further details.
+Default is at the RISING edge. See [the file BasicOperation-TriggerEdge.md](extras/BasicOperation-TriggerEdge.md) for further details.
 
 - #### bool swapUsartPin (default: false) ####
 The MegaCoreX and DxCore processors have the possibility to swap the USART pins to alternative pins. This may be useful with boards that do not make available all pins of the micro-controller, but also in cases where RTC-based decoding is used. The RTC needs pin PA0 for clock (RS-bus) input, but this pin is also used by the USART0. By setting `swapUsartPin` USART0 will use Pin PA4 instead of PA0. See [sup_usart.cpp](src/sup_usart.cpp) for furter details.
