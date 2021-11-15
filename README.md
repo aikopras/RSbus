@@ -22,7 +22,7 @@ The choice of receive pin depends on the micro-controller being used, as well as
 - The same holds for DxCore processors, such as the AVR-DA and AVR-DB series. In addition, DxCore processors also support the use of one of the Timer-Counters B to count RS-bus pulses. Using a TCB has as advantage that basically any pin can be used as `rxPin`, but the disadvantage is that TCB timers may be scarce resources. Again see [Basic operation](extras/BasicOperation.md) for further details.
 
 #### Transmit pin ####
-The transmit pin must be one of the USART TX-pins. However, for this library we should not provide the Arduino pin number, but the USART number. Most traditional ATMega processors support a single USART only. More powerful processors, such as the 2560 and newer MegaCoreX and DxCore processors support 4 or even more USARTS. See [src/support_usart.cpp](src/support_usart.cpp) for details.
+The transmit pin must be one of the USART TX-pins. However, for this library we should not provide the Arduino pin number, but the USART number. Most traditional ATMega processors support a single USART only. More powerful processors, such as the 2560 and newer MegaCoreX and DxCore processors support 4 or even more USARTS. See [src/sup_usart.cpp](src/sup_usart.cpp) for details.
 Below an overview of (some) processors that support multiple USARTs.
 - 2 USARTS: 64, 128, 162, 164, 324, 328PB, 644, 1281, 1284, 2561
 - 4 USARTS: 640, 1280, 2560, 4808, 4809
@@ -65,7 +65,7 @@ Determines when the RS-bus ISR is triggered: at the RISING edge of the RS-bus po
 Default is at the RISING edge. See See [the file BasicOperation-TriggerEdge.md](extras/BasicOperation-TriggerEdge.md) for further details.
 
 - #### bool swapUsartPin (default: false) ####
-The MegaCoreX and DxCore processors have the possibility to swap the USART pins to alternative pins. This may be useful with boards that do not make available all pins of the micro-controller, but also in cases where RTC-based decoding is used. The RTC needs pin PA0 for clock (RS-bus) input, but this pin is also used by the USART0. By setting `swapUsartPin` USART0 will use Pin PA4 instead of PA0. See [support_usart.cpp](src/support_usart.cpp) for furter details.
+The MegaCoreX and DxCore processors have the possibility to swap the USART pins to alternative pins. This may be useful with boards that do not make available all pins of the micro-controller, but also in cases where RTC-based decoding is used. The RTC needs pin PA0 for clock (RS-bus) input, but this pin is also used by the USART0. By setting `swapUsartPin` USART0 will use Pin PA4 instead of PA0. See [sup_usart.cpp](src/sup_usart.cpp) for furter details.
 
 - #### bool parityErrorFlag ####
 This flag indicates if the Command System has detected a parity error somewhere during the last polling cycle. The flag is automatically cleared after a subsequent polling cycle (provided no new parity errors were detected). The flag can be tested in the main program, and used to retransmit the value from the previous cycle.
