@@ -30,7 +30,7 @@ Below an overview of (some) processors that support multiple USARTs.
 
 ## Decoding approaches ##
 Version 2 (V2) of the RS-bus library supports different RS-bus routines for different ATMega controllers and software.
-To select a different approach, modify the file [src/rsbusVariants.h](src/rsbusVariants.h).
+To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusVariants.h).
 
 - **The default approach (V2):**
   The default approach is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
