@@ -4,6 +4,7 @@
 // author:    Deisterholf / Aiko Pras
 // source:    https://github.com/deisterhold/Arduino-FIFO
 // history:   2019-01-30 V0.1 ap rewritten, to customize for the RS-bus purpose
+//            2021-11-29 V0.2 ap FIFO size increased, to facilitate retransmissions
 //
 // purpose:   FIFO functions to store RS-bus data
 //            
@@ -37,7 +38,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FIFO_SIZE 16
+#define FIFO_SIZE 32
 
 class FIFO {
 

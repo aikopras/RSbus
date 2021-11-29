@@ -78,6 +78,7 @@ class RSbusConnection {
     RSbusConnection();                  // The constructor for this class
 
     uint8_t address;                    // 1..128. The address used for this RS-bus connection
+    uint8_t retransmissions;            // 0..2. 0 = no retransmission, 1 = one retransmission, 2 = two ...
     bool needConnect;                   // A flag signalling the main program that it should to connect to the master
     Decoder_t type;                     // Do we send Switch or Feedback messages? Default: Switch
 

@@ -10,6 +10,7 @@
 // history:   2019-02-10 ap V0.1 Initial version
 //            2021-07-26 ap v0.2 Default type is now 'Feedback decoder'
 //            2021-09-30 ap v1.0 Different types of hardware are supported
+//            2021-11-29 ap v2.1 Retransmission added (irrespective of transmission errors)
 //
 //
 //
@@ -85,7 +86,8 @@ RSbusConnection::RSbusConnection() {
   address = 0;                                 // Initialise to 0
   type = Feedback;                             // Default value
   status = NotConnected;                       // state machine starts NotConnected
-  needConnect = false;                         // Initialise to 0
+  needConnect = false;                         // Initialise to false
+  retransmissions = 0;                         // Default: no retransmissions
 }
 
 
@@ -126,7 +128,8 @@ void RSbusConnection::send4bits(Nibble_t nibble, uint8_t value) {
        | ((value & 0b00000100) <<3)  // move bit 5 to bit 2 (distance = 3)
        | ((value & 0b00001000) <<1)  // move bit 4 to bit 3 (distance = 1)
        | (nibbleValue<<NIBBLEBIT);
-  format_nibble(data);
+  // If data should always be retransmitted, store the same nibble multiple times
+  for (uint8_t i = 0; i <= retransmissions; i++) {format_nibble(data);}
 }
 
     
@@ -136,23 +139,27 @@ void RSbusConnection::send8bits(uint8_t value) {
   // data = 0..255  
   // Note that bit order should be changed.
   const uint8_t NIBBLEBIT = 3;       // low or high order nibble
-  uint8_t data;
-  // Sending 8 bits is sufficient to connect to the master 
+  uint8_t dataNibble1;
+  uint8_t dataNibble2;
+// Sending 8 bits is sufficient to connect to the master
   needConnect = false;
   // send first nibble (for the low order bits
-  data = ((value & 0b00000001) <<7)  // move bit 7 to bit 0 (distance = 7)
-       | ((value & 0b00000010) <<5)  // move bit 6 to bit 1 (distance = 5)
-       | ((value & 0b00000100) <<3)  // move bit 5 to bit 2 (distance = 3)
-       | ((value & 0b00001000) <<1)  // move bit 4 to bit 3 (distance = 1)
-       | (0<<NIBBLEBIT);
-  format_nibble(data);
+  dataNibble1 = ((value & 0b00000001) <<7)  // move bit 7 to bit 0 (distance = 7)
+              | ((value & 0b00000010) <<5)  // move bit 6 to bit 1 (distance = 5)
+              | ((value & 0b00000100) <<3)  // move bit 5 to bit 2 (distance = 3)
+              | ((value & 0b00001000) <<1)  // move bit 4 to bit 3 (distance = 1)
+              | (0<<NIBBLEBIT);
   // send second nibble (for the high order bits)
-  data = ((value & 0b00010000) <<3)  // move bit 3 to bit 0 (distance = 3)
-       | ((value & 0b00100000) <<1)  // move bit 2 to bit 1 (distance = 1)
-       | ((value & 0b01000000) >>1)  // move bit 1 to bit 2 (distance = -1)
-       | ((value & 0b10000000) >>3)  // move bit 0 to bit 3 (distance = -3)
-       | (1<<NIBBLEBIT);
-  format_nibble(data);
+  dataNibble2 = ((value & 0b00010000) <<3)  // move bit 3 to bit 0 (distance = 3)
+              | ((value & 0b00100000) <<1)  // move bit 2 to bit 1 (distance = 1)
+              | ((value & 0b01000000) >>1)  // move bit 1 to bit 2 (distance = -1)
+              | ((value & 0b10000000) >>3)  // move bit 0 to bit 3 (distance = -3)
+              | (1<<NIBBLEBIT);
+  // If data should always be retransmitted, store the same nibbles multiple times
+  for (uint8_t i = 0; i <= retransmissions; i++) {
+    format_nibble(dataNibble1);
+    format_nibble(dataNibble2);
+  }
 }
 
 
