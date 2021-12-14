@@ -195,9 +195,9 @@ The schematics and PCBs are available from my EasyEda homepage [EasyEda homepage
 # Support pages #
 - [Basic operation of the RS-bus feedback decoder](extras/BasicOperation.md)
 - [Monitoring RS-bus feedback messages](extras/Monitor.md)
-- [Details of possible switch feedback problems](extras/switch-feedback_problems.md)
+- [Details of possible switch feedback problems](extras/switch-feedback-problems.md)
 - [Error detection and error handling](extras/BasicOperation-ErrorHandling.md)
 - [Internals of CheckPolling](extras/BasicOperation-CheckPolling.md)
 - [When to trigger: rising edge versus falling edge](extras/BasicOperation-TriggerEdge.md)
-- [Arduino and external interrupts](extras/Attach_interrupt.md)
+- [Arduino and external interrupts](extras/Attach-interrupt.md)
 - [Basic operation of the initial version of this software](extras/BasicOperation-Initial_Version.md)
