@@ -2,7 +2,7 @@
 # RS-bus - Version 1 #
 
 The rs_interrupt() ISR is called whenever a transition is detected on the RS-bus. Such transition indicates that the next feedback decoder is allowed to send information. To determine which decoder has its turn, the ISR increments at each transition the `addressPolled` variable. If data is made available to the ISR (the `data2sendFlag` is set and the data has been entered into the `data2send` variable, the data will be send once the `addressPolled` variable matches the address (`address2use`) of this decoder (with offset 1). The ISR also resets the `timeIdle` variable, to allow `checkPolling()` to detect the silence period preceding each new polling cycle. In normal operation this silence period is 7 ms.
-![ISR](Approach-Software-4m-A.png)
+![ISR](Approach-Software-4ms-A.png)
 
 The actual data transfer is performed by the Interrupt Service Routine (instead of the main loop) to ensure that:
  - data is send immediately after the feedback module gets its turn, and
