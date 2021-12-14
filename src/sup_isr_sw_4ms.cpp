@@ -26,7 +26,7 @@
 #include "sup_isr.h"
 #include "sup_usart.h"
 
-// This code will only be used if we did not define in RSbusVariants.h the "RSBUS_USES_RTC" directive
+// This code will only be used if we defined in RSbusVariants.h the "RSBUS_USES_SW_4MS" directive
 #if defined(RSBUS_USES_SW_4MS)
 
 
@@ -62,7 +62,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
 // and "detach".
 
 RSbusHardware::RSbusHardware() {                     // Constructor
-  masterIsSynchronised = false;                      // No RS-bus signal detected yet
+  rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
   swapUsartPin = false;                              // We use the default USART TX pin
   interruptModeRising = true;                        // Earlier hardware triggered on FALLING
 }
@@ -115,16 +115,16 @@ void RSbusHardware::checkPolling(void) {
       if ((millis() - rsISR.tLastInterrupt) > 4) {
         // A new RS-bus cycle has started. Reset addressPolled
         // If 130 addresses were polled, layer 1 works fine
-        if (rsISR.addressPolled == 130) masterIsSynchronised = true;
-        else {masterIsSynchronised = false;  }
+        if (rsISR.addressPolled == 130) rsSignalIsOK = true;
+        else {rsSignalIsOK = false;  }
         rsISR.addressPolled = 0;
       }
     }
   }
   else
-    if (masterIsSynchronised)
-      if ((millis() - rsISR.tLastInterrupt) > 10) masterIsSynchronised = false; // more than 10ms silent
-  if (masterIsSynchronised == false) rsISR.data2sendFlag = false; // cancel possible data waiting for ISR
+    if (rsSignalIsOK)
+      if ((millis() - rsISR.tLastInterrupt) > 10) rsSignalIsOK = false; // more than 10ms silent
+  if (rsSignalIsOK == false) rsISR.data2sendFlag = false; // cancel possible data waiting for ISR
 }
 
 

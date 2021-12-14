@@ -38,7 +38,7 @@ To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusV
 - **RSBUS_USES_RTC (V2):**
   An alternative approach is to use the Real Time Clock (RTC) of the modern ATMegaX and DxCore processors (such as 4808, 4809, 128DA48 etc). This code puts less load on the CPU but has as disadvantage that the RS-Bus input signal *MUST* be connected to pin PA0 (ExtClk). This approach requires installation of the MegaCoreX or DxCore board software. ***=> recommended for newer processors on MegaCoreX / DxCore boards. Requires pin PA0!***
 
-- **RSBUS_USES_TCBx (V2):**
+- **RSBUS_USES_HW_TCBx (V2):**
   A similar approach is to use one of the five TCBs of a DxCore processor as event counter. For that purpose the TCB should be used in the "Input capture on Event" mode. That mode exists on novel DxCore (such as the 128DA48) processors, but not on MegaCoreX (such as 4808, 4809) or earlier processors. Like the RTC approach, this approach puts limited load on the CPU,  but as opposed to the RTC approach we have (more) freedom in choosing the RS-bus input pin. This approach requires installation of the DxCore board software. ***Supported only on DxCore boards. Useful if pin PA0 is not available.***
 
 - **RSBUS_USES_SW_4MS (V1):**
@@ -57,22 +57,31 @@ Should be called before of a (soft)reset of the decoder, to stop the ISR.
 - #### void checkPolling(void) ####
 Should be called as often as possible from the program's main loop. The RS-bus master sequentially polls each decoder. After all decoders have been polled, a new polling cycle will start. checkPolling() keeps the polling administration up-to-date.
 
-- #### bool masterIsSynchronised ####
-A flag maintained by checkPolling() and used by objects from the RSbusConnection class to determine if the start of the (first) polling cycle has been detected and the master is ready to receive feedback data.
+- #### bool rsSignalIsOK ####
+A flag maintained by checkPolling() and used by objects from the RSbusConnection class to determine if a valid polling cycle has been detected and the master is ready to receive feedback data. In case of RS-bus errors, checkPolling() can force a reconnection to the master and thus the retransmission of feedback data, depending on the settings of `parityErrorHandling` and `pulseCountErrorHandling`.
 
 - #### bool interruptModeRising (default: true) ####
 Determines when the RS-bus ISR is triggered: at the RISING edge of the RS-bus polling signal or at the FALLING edge.
 Default is at the RISING edge. See [the file BasicOperation-TriggerEdge.md](extras/BasicOperation-TriggerEdge.md) for further details.
 
 - #### bool swapUsartPin (default: false) ####
-The MegaCoreX and DxCore processors have the possibility to swap the USART pins to alternative pins. This may be useful with boards that do not make available all pins of the micro-controller, but also in cases where RTC-based decoding is used. The RTC needs pin PA0 for clock (RS-bus) input, but this pin is also used by the USART0. By setting `swapUsartPin` USART0 will use Pin PA4 instead of PA0. See [sup_usart.cpp](src/sup_usart.cpp) for furter details.
-
-- #### bool parityErrorFlag ####
-This flag indicates if the Command System has detected a parity error somewhere during the last polling cycle. The flag is automatically cleared after a subsequent polling cycle (provided no new parity errors were detected). The flag can be tested in the main program, and used to retransmit the value from the previous cycle.
+The MegaCoreX and DxCore processors have the possibility to swap the USART pins to alternative pins. This may be useful with boards that do not make available all pins of the micro-controller, but also in cases where RTC-based decoding is used. The RTC needs pin PA0 for clock (RS-bus) input, but this pin is also used by the USART0. By setting `swapUsartPin`, USART0 will use Pin PA4 instead of PA0. See [sup_usart.cpp](src/sup_usart.cpp) for further details.
 
 - #### uint8_t parityErrors ####
 This counter increases after each parity error that has been detected. A high value indicates transmission problems on the RS-bus. Another error source may be that the same USART is used for both RS-bus data transmission, as well as standard Arduino Serial communication.
 
+- #### uint8_t pulseCountErrors ####
+This counter increases after each pulse count error that has been detected. Each pulse train should consist of 130 pulses. If CheckPolling() sees a different number, the counter will be increased. Pulse count errors generally originate from interference on the microcontroller's input pin, and may not be observed by every decoder. Interference on the RS-bus itself has not been observed.
+
+- #### uint8_t parityErrorHandling ####
+The `parityErrorHandling` parameter determines how the software reacts after detection of a parity error. If the value if this parameter is zero, it will not perform any action. If the value of this parameter is one, it requests the main sketch to retransmit the value of all feedback bits, *provided this decoder has transmitted a feedback message in the previous cycle*. If the value of this parameter is two, it requests the main sketch to retransmit the value of all feedback bits, *irrespective whether this decoder has transmitted a feedback message in the previous cycle or not*.
+The default value of the `parityErrorHandling` parameter is one.
+
+- #### uint8_t pulseCountErrorHandling ####
+The `pulseCountErrorHandling` parameter determines how the software reacts after detection of a pulse count error. If the value if this parameter is zero, it will not perform any additional action. If the value of this parameter is one, it requests the main sketch to retransmit the value of all feedback bits, *provided this decoder has transmitted a feedback message in the previous cycle*. If the value of this parameter is two, it requests the main sketch to retransmit the value of all feedback bits, *irrespective whether this decoder has transmitted a feedback message in the previous cycle or not*.
+The default value of the `pulseCountErrorHandling` parameter is two, since the injection of extra pulses may trigger *other* feedback decoders that have data waiting in their transmission queue to use the time slot (RS-bus address) that belongs to this decoder. Therefore it *may* make sense that all feedback decoders send fresh feedback data to the RS-bus command station.
+
+See the file [BasicOperation-ErrorHandling.md](extras/BasicOperation-ErrorHandling.md) for further details on possible error sources and error handling.
 
 ## The RSbusConnection class ##
 For each address this decoder uses a dedicated `RSbusConnection` object, that should be instantiated by the main program. To connect to the master station, each `RSbusConnection` object should start with sending all 8 feedback bits to the master, using `send8bits()`.
@@ -80,8 +89,14 @@ For each address this decoder uses a dedicated `RSbusConnection` object, that sh
 - #### uint8_t address ####
 The address used by this RS-bus connection object. Valid values are: 1..128.
 
-- #### bool needConnect ####
-A flag indicating to the user that a connection should be established to the master station. If this flag is set, the main program should react with calling `send8bits()`, to tell the master the value of all 8 feedback bits. This flag can be ignored if the main program always sends all 8 feedback bits using `send8bits()`, and never use `send4bits()` for sending only part of our feedback bits.
+- #### uint8_t forwardErrorCorrection ####
+An additional approach to increase reliability, it to send each feedback messages multiple times. For that purpose the `forwardErrorCorrection` parameter can be set. Forward error correction is proactive, in the sense that it anticipates that messages may get lost by sending the same message again, irrespective if a transmission error was signalled by the RS-Bus master or not.
+Reasonable values for `forwardErrorCorrection` are 0 (feedback data is send once), 1 (after the data is send, 1 copy of the same data is send again), or  (after the data is send, 2 copies of the same data are send again).
+
+  The default value of the `forwardErrorCorrection` parameter is 0. See the file [BasicOperation-ErrorHandling.md](extras/BasicOperation-ErrorHandling.md) for further details on possible error sources and error handling.
+
+- #### bool feedbackRequested ####
+A flag indicating to the user that it should send its 8 bits of feedback data to the master station. This is needed at the start, once a valid RS-Bus signal is detected, or after certain errors. If this flag is set, the main program should react with calling `send8bits()`, to tell the master the value of all 8 feedback bits.
 
   Note that it is the responsibility of the user program (instead of the library) to connect to the master station, since only the user program knows the correct value of the feedback bits. Especially in case of short power drops (as a result of a temporary shortcut) it may be important to immediately send the correct feedback values, to avoid that train-controller software gets confused.
 
@@ -130,7 +145,7 @@ void loop() {
   // For testing purposes we try every second to send 8 bits (2 messages)
   if ((millis() - T_last) > 1000) {
     T_last = millis();
-    if (rsbusHardware.masterIsSynchronised) {
+    if (rsbusHardware.rsSignalIsOK) {
       digitalWrite(ledPin, 1);       // We have a valid RS-Bus signal
       rsbus.send8bits(value);        // Tell the library to buffer these 8 bits for later sending
       switch (value) {
@@ -148,15 +163,15 @@ void loop() {
     else digitalWrite(ledPin, 0);    // No valid RS-Bus signal
   }
   // Next functions should be called from main as often as possible
-  // If a RS-Bus feedback decoder starts, it needs to connect to the master station
-  if (rsbus.needConnect) rsbus.send8bits(0);
+  // If a RS-Bus feedback decoder starts, or after certain errors, it needs to send its feedback data to the master station
+  if (rsbus.feedbackRequested) rsbus.send8bits(0);
   rsbusHardware.checkPolling();      // Listen to RS-Bus polling messages for our turn
   rsbus.checkConnection();           // Check if the buffer contains data, and give this to the ISR and USART
 }
 ```
 
 # Release notes #
-The current release (2.0.0) of this RS-bus code relies for the TCB-based decoding routine still on the event library as found in DxCore release 1.3.6. That version of the event library does not (yet) support the use of Arduino pin numbers to specify the RS-bus input pin. Instead we will use a fixed pin (PA0). Newer versions of the event library are expected to support Arduino pin numbers in the attach() method. Once this newer version is available, this software will be updated to support complete freedom in choosing the RS-bus input pin.  
+The current release (2.2.0) of this RS-bus code relies for the TCB-based decoding routine  on the new MegaCoreX and DxCore event libraries.  
 References:
  - [https://github.com/SpenceKonde/DxCore](https://github.com/SpenceKonde/DxCore)
  - [https://github.com/SpenceKonde/DxCore/tree/master/megaavr/libraries/Event](https://github.com/SpenceKonde/DxCore/tree/master/megaavr/libraries/Event)
@@ -171,3 +186,13 @@ The schematics and PCBs are available from my EasyEda homepage [EasyEda homepage
 - https://sites.google.com/site/dcctrains/rs-bus-feed
 - MegaCoreX: see [MCUdude](https://github.com/MCUdude)
 - DxCore: see [SpenceKonde](https://github.com/SpenceKonde)
+
+# Support pages #
+- [Basic operation of the RS-bus feedback decoder](extras/BasicOperation.md)
+- [Monitoring RS-bus feedback messages](extras/Monitor.md)
+- [Details of possible switch feedback problems](extras/switch-feedback_problems.md)
+- [Error detection and error handling](extras/BasicOperation-ErrorHandling.md)
+- [Internals of CheckPolling](extras/BasicOperation-CheckPolling.md)
+- [When to trigger: rising edge versus falling edge](extras/BasicOperation-TriggerEdge.md)
+- [Arduino and external interrupts](extras/Attach_interrupt.md)
+- [Basic operation of the initial version of this software](extras/BasicOperation-Initial_Version.md)

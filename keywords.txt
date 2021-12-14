@@ -5,27 +5,32 @@
 #########################################
 # Datatypes (KEYWORD1)
 #########################################
-RSbusHardware		KEYWORD1
-RSbusConnection		KEYWORD1
+RSbusHardware			KEYWORD1
+RSbusConnection			KEYWORD1
 
 #########################################
 # Methods and Functions (KEYWORD2)
 #########################################
-attach			KEYWORD2
-detach			KEYWORD2
-checkPolling		KEYWORD2
-send4bits		KEYWORD2
-send8bits		KEYWORD2
-checkConnection		KEYWORD2
+attach				KEYWORD2
+detach				KEYWORD2
+checkPolling			KEYWORD2
 
-masterIsSynchronised	KEYWORD2
-parityErrors		KEYWORD2
-parityErrorFlag		KEYWORD2
-swapUsartPin		KEYWORD2
-interruptModeRising	KEYWORD2
-address			KEYWORD2
-needConnect		KEYWORD2
-type			KEYWORD2
+send4bits			KEYWORD2
+send8bits			KEYWORD2
+checkConnection			KEYWORD2
+
+rsSignalIsOK			KEYWORD2
+interruptModeRising		KEYWORD2
+swapUsartPin			KEYWORD2
+parityErrors			KEYWORD2
+pulseCountErrors		KEYWORD2
+parityErrorHandling		KEYWORD2
+pulseCountErrorHandling		KEYWORD2
+
+address				KEYWORD2
+forwardErrorCorrection		KEYWORD2
+feedbackRequested		KEYWORD2
+type				KEYWORD2
 
 
 #########################################
@@ -36,7 +41,7 @@ type			KEYWORD2
 #########################################
 # Constants (LITERAL1)
 #########################################
-Switch		LITERAL1
-Feedback	LITERAL1
-HighBits	LITERAL1
-LowBits		LITERAL1
+Switch				LITERAL1
+Feedback			LITERAL1
+HighBits			LITERAL1
+LowBits				LITERAL1

@@ -54,21 +54,27 @@ class RSbusHardware {
   public:
     RSbusHardware();                    // The constructor for this class
   
-    bool masterIsSynchronised;          // Flag: decoder has detected the start of a new polling cyclus 
+    bool rsSignalIsOK;                  // Flag to indicate if the polling cyclus is error-free 
     bool interruptModeRising;           // The interrupt triggers at the RISING edge (default: true)
     bool swapUsartPin;                  // Enables the use of alternative USART pins (default: false)
-    bool parityErrorFlag;               // Parity error detected in last cycle
     uint8_t parityErrors;               // Number of parity errors detected
-   
+    uint8_t pulseCountErrors;           // Number of pulse count errors detected
+    uint8_t parityErrorHandling;        // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
+    uint8_t pulseCountErrorHandling;    // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
+  
     void attach(                        // Initialises the RS-bus ISR
       uint8_t usartNumber,              // usart for sending (0..4)
       uint8_t rxPin);                   // pin used for receiving; in the default case an INT pin
    
     void detach(void);                  // stops the RS-bus ISR
     void checkPolling(void);            // Checks the polling logic of the RS-bus receiver.
-
+  
   private:
     int rxPinUsed;                      // local copy of pin used for sending, using the USART
+    void triggerRetransmission(         // May set rsSignalIsOK to false, which triggers retransmission
+      uint8_t strategy,                 // 0 = never, 1 = if just transmitted, 2 = always
+      boolean dataWasSendFlag           // for strategy = 1
+    );
  };
 
 
@@ -78,8 +84,8 @@ class RSbusConnection {
     RSbusConnection();                  // The constructor for this class
 
     uint8_t address;                    // 1..128. The address used for this RS-bus connection
-    uint8_t retransmissions;            // 0..2. 0 = no retransmission, 1 = one retransmission, 2 = two ...
-    bool needConnect;                   // A flag signalling the main program that it should to connect to the master
+    uint8_t forwardErrorCorrection;     // 0..2. 0 = no retransmission, 1 = one retransmission, 2 = two ...
+    bool feedbackRequested;             // A flag signalling the main program that it should send 8 feedback bits
     Decoder_t type;                     // Do we send Switch or Feedback messages? Default: Switch
 
                                      
@@ -101,10 +107,10 @@ class RSbusConnection {
     void format_nibble(uint8_t value);  // To set the decoder type and the parity bit
 
     enum Status {                       // The state machine that is maintained for each connection
-      NotConnected,
-      ConnectionIsNeeded,
-      ConnectNibble1,
-      ConnectNibble2,
-      Connected
+      notSynchronised,
+      feedbackIsNeeded,
+      feedbackNibble1,
+      feedbackNibble2,
+      connected
     } status;
 };

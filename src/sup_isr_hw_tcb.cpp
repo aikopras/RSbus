@@ -1,6 +1,6 @@
 //******************************************************************************************************
 //
-// file:      sup_isr_tcb.cpp
+// file:      sup_isr_hw_tcb.cpp
 // purpose:   Support file for the RS-bus library. 
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted by
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
@@ -88,18 +88,18 @@
 // - a transmit pin for the UART
 //
 //
-//************************************************************************************************
+//******************************************************************************************************
 #include <Arduino.h>
 #include "RSbus.h"
 #include "sup_isr.h"
 #include "sup_usart.h"
 
-// This code will only be used if we define in RSbusVariants.h the "RSBUS_USES_TCB" directive
-#if defined(RSBUS_USES_TCB0) || defined(RSBUS_USES_TCB1) || defined(RSBUS_USES_TCB2) || \
-    defined(RSBUS_USES_TCB3) || defined(RSBUS_USES_TCB4)
+// This code will only be used if we define in RSbusVariants.h the "RSBUS_USES_HW_TCB" directive
+#if defined(RSBUS_USES_HW_TCB0) || defined(RSBUS_USES_HW_TCB1) || defined(RSBUS_USES_HW_TCB2) || \
+    defined(RSBUS_USES_HW_TCB3) || defined(RSBUS_USES_HW_TCB4)
 #include <Event.h>
 
-//************************************************************************************************
+//******************************************************************************************************
 // The following objects are instantiated elsewhere, but are used here
 extern RSbusHardware rsbusHardware;  // instantiated in "RS-bus.cpp"
 extern volatile RSbusIsr rsISR;      // instantiated in "RS-bus.cpp"
@@ -108,15 +108,19 @@ extern USART rsUSART;                // instantiated in "sup_usart.cpp" We only 
 
 static volatile TCB_t* _timer;       // In init and detach we use a pointer to the timer
 
-//**********************************************************************************************
+//******************************************************************************************************
 // RSbusIsr: constructor
-//**********************************************************************************************
-RSbusIsr::RSbusIsr(void) {           // Define the constructor
-  data2send = 0;                     // Empty our send data byte
-  address2use = 0;
-  data2sendFlag = false;             // No, we don't have anything to send yet
-  data4usartFlag = false;
-  tLastCheck = millis();             // Current time
+//******************************************************************************************************
+RSbusIsr::RSbusIsr(void) {       // Define the constructor
+  lastPulseCnt = 0;              // Any value
+  data4IsrFlag = false;          // ISR acts on data4IsrFlag, instead of data2sendFlag
+  address2use = 0;               // Initialise address to 0
+  data2send = 0;                 // Empty our send data byte
+  data2sendFlag = false;         // No, we don't have anything to send yet
+  dataWasSendFlag = false;       // No, we didn't send anything yet
+  flagParity = false;            // No, we don't need to retranmit after a parity error
+  flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
+  tLastCheck = millis();         // Current time
 }
 
    
@@ -137,27 +141,27 @@ void initTcb(void) {
   // Step 1: Instead of calling a specific timer directly, in init and detach we use a pointer to the
   // selected timer. However, since pointers add a level of indirection, the registers that we use
   // (CCMP, CNT and INTFLAGS) will be directly accessed via #defines
-  #if defined(RSBUS_USES_TCB0)
+  #if defined(RSBUS_USES_HW_TCB0)
     _timer = &TCB0;
     #define timer_CCMP     TCB0_CCMP
     #define timer_CNT      TCB0_CNT
     #define timer_INTFLAGS TCB0_INTFLAGS
-  #elif defined(RSBUS_USES_TCB1)
+  #elif defined(RSBUS_USES_HW_TCB1)
     _timer = &TCB1;
     #define timer_CCMP     TCB1_CCMP
     #define timer_CNT      TCB1_CNT
     #define timer_INTFLAGS TCB1_INTFLAGS
-  #elif defined(RSBUS_USES_TCB2)
+  #elif defined(RSBUS_USES_HW_TCB2)
     _timer = &TCB2;
     #define timer_CCMP     TCB2_CCMP
     #define timer_CNT      TCB2_CNT
     #define timer_INTFLAGS TCB2_INTFLAGS
-  #elif defined(RSBUS_USES_TCB3)
+  #elif defined(RSBUS_USES_HW_TCB3)
     _timer = &TCB3;
     #define timer_CCMP     TCB3_CCMP
     #define timer_CNT      TCB3_CNT
     #define timer_INTFLAGS TCB3_INTFLAGS
-  #elif defined(RSBUS_USES_TCB4)
+  #elif defined(RSBUS_USES_HW_TCB4)
     _timer = &TCB4;
     #define timer_CCMP     TCB4_CCMP
     #define timer_CNT      TCB4_CNT
@@ -173,72 +177,43 @@ void initTcb(void) {
   // Initialise the control registers 
   _timer->CTRLA = TCB_ENABLE_bm | TCB_CLKSEL_EVENT_gc; // Enable TCB and count Events
   _timer->CTRLB = TCB_CNTMODE_INT_gc;                  // Periodic Interrupt Mode
-  _timer->EVCTRL = TCB_CAPTEI_bm;                      // Enable input capture events
+  _timer->EVCTRL = TCB_CAPTEI_bm | TCB_FILTER_bm;      // Enable input capture events and noise cancelation
   _timer->INTCTRL |= TCB_CAPT_bm;                      // Enable CAPT interrupts
   _timer->CCMP = rsISR.address2use;                    // Initial RS-Bus address
   interrupts();
 }
 
-// TODO: Event library: OLD
-void initEventSystem(uint8_t rxPin) {
-  noInterrupts();
-  // Assign Event generator: RS-bus input starts timer
-  Event0.assign_generator(gen0::pin_pa0);      // Set PA0 as event generator = RSBus RX
-  // Set Event Users
-  // TODO: next line only for debugging
-  Event0.set_user(user::evouta_pin_pa2);    // Set PA2 as event user = Debug
-  // myEvent.set_user(user::evouta_pin_pa2);    // Set PA2 as event user = Debug
-  //
-  #if defined(RSBUS_USES_TCB0)
-    Event0.set_user(user::tcb0_cnt);        // Current DxCore Event Library
-  #elif defined(RSBUS_USES_TCB1)
-    Event0.set_user(user::tcb1_cnt);
-  #elif defined(RSBUS_USES_TCB2)
-    Event0.set_user(user::tcb2_cnt);
-  #elif defined(RSBUS_USES_TCB3)
-    Event0.set_user(user::tcb3_cnt);
-  #elif defined(RSBUS_USES_TCB4)
-    Event0.set_user(user::tcb4_cnt);
-  #endif
-  //
-  // Start the event channel
-  Event0.start();
-  interrupts();
-}
 
-/*
-// TODO: Event library: NEW
 void initEventSystem(uint8_t rxPin) {
   noInterrupts();
   // Assign Event generator: RS-bus input starts timer
   Event& myEvent = Event::assign_generator_pin(rxPin);
-  //
   // Set Event Users
-  // TODO: next line only for debugging
-  myEvent.set_user(user::evouta_pin_pa2);    // Set PA2 as event user = Debug
-  //
-  #if defined(RSBUS_USES_TCB0)
+  #if defined(RSBUS_USES_HW_TCB0)
     myEvent.set_user(user::tcb0_cnt);
-  #elif defined(RSBUS_USES_TCB1)
+  #elif defined(RSBUS_USES_HW_TCB1)
     myEvent.set_user(user::tcb1_cnt);
-  #elif defined(RSBUS_USES_TCB2)
+  #elif defined(RSBUS_USES_HW_TCB2)
     myEvent.set_user(user::tcb2_cnt);
-  #elif defined(RSBUS_USES_TCB3)
+  #elif defined(RSBUS_USES_HW_TCB3)
     myEvent.set_user(user::tcb3_cnt);
-  #elif defined(RSBUS_USES_TCB4)
+  #elif defined(RSBUS_USES_HW_TCB4)
     myEvent.set_user(user::tcb4_cnt);
   #endif
-  //
   // Start the event channel
   myEvent.start();
   interrupts();
 }
-*/
+
 
 RSbusHardware::RSbusHardware() {                     // Constructor
-  masterIsSynchronised = false;                      // Is RTC.CNT zero in the silence period
+  rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
+  swapUsartPin = false;                              // We use the default USART TX pin
+  interruptModeRising = true;                        // Earlier hardware triggered on FALLING
   parityErrors = 0;                                  // Counter for the number of 10,7ms gaps
-  parityErrorFlag = false;                           // Flag for the previous cycle
+  pulseCountErrors = 0;                              // Number of times a cycli did not have 130 pulses
+  parityErrorHandling = 1;                           // Default: if we have just send data, retransmit!
+  pulseCountErrorHandling = 2;                       // Default: always retransmit all feedback data
 }
 
 
@@ -268,9 +243,31 @@ void RSbusHardware::detach(void) {
 }
 
 
-//************************************************************************************************
+//******************************************************************************************************
+void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted) {
+  // Retransmissions can be triggered by clearing the rsSignalIsOK flag.
+  // If this flag is cleared, checkConnection() sets the status to 'notSynchronised'
+  // empties the FIFO and clears the data2SendFlag.
+  // This will trigger the main sketch to retransmit (all 8 bits of) feedback data
+  switch (strategy) {
+    case 0:                                  // Do nothing
+    break;
+    case 1:                                  // Signal an error if we just transmitted
+      if (justTransmitted) rsSignalIsOK = false;
+    break;
+    case 2:                                  // Always signal an error
+      rsSignalIsOK = false;                  // Will trigger a retransmission
+    break;
+    default:                                 // Ignore
+    break;
+  }
+  // If the application will retransmit, we can cancel data ready for transmission
+  if (rsSignalIsOK == false) rsISR.data4IsrFlag = false;
+}
+
+//******************************************************************************************************
 // checkPolling(): Called from main as frequent as possible
-//************************************************************************************************
+//******************************************************************************************************
 // See for details: ../extras/BasicOperation-CheckPolling.md
 // CheckPolling() ignores all checks, except check 3 and check 5
 // - check 1: ignore
@@ -293,34 +290,39 @@ void RSbusHardware::checkPolling(void) {
       case 4:                                          // Same as case 3, nothing new
       case 6:                                          // Same as case 5, nothing new
       break;
-      case 3:                                          // Third check 
+      case 3:                                          // Third check => SILENCE!
+        rsISR.flagPulseCount = rsISR.dataWasSendFlag;  // ISR may set the dataWasSendFlag
+        rsISR.flagParity     = rsISR.dataWasSendFlag;  // and flags may trigger retransmission
+        rsISR.dataWasSendFlag = false;                 // but only is previous cycle had errors
         if (timer_CNT == 130) {
-          masterIsSynchronised = true;
+          rsSignalIsOK = true;
           timer_CNT = 0;                               // Start a new polling cycle
           rsISR.lastPulseCnt = 0;                      // Update as well, since we still have silence
           if (rsISR.data2sendFlag) {
             timer_CCMP = rsISR.address2use;            // The RS-bus address may be changed
             rsISR.ccmpValue = rsISR.address2use;       // For the ISR to reinitialise TCBx.CNT
-            rsISR.data4usartFlag = true;               // Tell the ISR that data may be send
+            rsISR.data4IsrFlag = true;                 // Tell the ISR that data may be send
           }
         }
         else {
           timer_CNT = 0;                               // Start a new polling cycle
           rsISR.lastPulseCnt = 0;                      // Update as well, since we still have silence
-          masterIsSynchronised = false;
+          if (rsSignalIsOK) {                          // Do nothing during initialisation
+            pulseCountErrors ++;
+            triggerRetransmission(pulseCountErrorHandling, rsISR.flagPulseCount);
+          }
         }
-        parityErrorFlag = false;                       // Cycle is over. Clear flag
       break;
       case 5:                                          // 8ms of silence
-        parityErrorFlag = true;                        // Retransmission may be attempted in next cycle
-        parityErrors++;                                // Keep track of number of parity errors
+        if (rsSignalIsOK) {                            // Only act if everything was OK before
+          parityErrors++;                              // Keep track of number of parity errors
+          triggerRetransmission(parityErrorHandling, rsISR.flagParity);
+        }
       break;
       case 7:                                          // 12ms of silence
-        parityErrorFlag = false;                       // Wasn't a parity error
-        parityErrors--;                                // Wasn't a parity error
-        masterIsSynchronised = false;                  // But worse: a RS-bus signal loss
-        rsISR.data2sendFlag = false;                   // Cancel possible data waiting for ISR
-        rsISR.data4usartFlag = false;                  // Cancel possible data waiting for ISR
+        if (rsSignalIsOK) parityErrors--;              // Wasn't a parity error
+        rsSignalIsOK = false;                          // But worse: a RS-bus signal loss
+        rsISR.data4IsrFlag = false;                    // Cancel possible data waiting for ISR
       break;
       default:                                         // Silence >= 14ms
       break;
@@ -334,32 +336,32 @@ void RSbusHardware::checkPolling(void) {
 }
 
 
-//************************************************************************************************
+//******************************************************************************************************
 // Define the TCB-based Interrupt Service routine (ISR) for the RS-bus
-//************************************************************************************************
+//******************************************************************************************************
 // Select the corresponding ISR
-#if defined(RSBUS_USES_TCB0)
+#if defined(RSBUS_USES_HW_TCB0)
   ISR(TCB0_INT_vect) {
-#elif defined(RSBUS_USES_TCB1)
+#elif defined(RSBUS_USES_HW_TCB1)
   ISR(TCB1_INT_vect) {
-#elif defined(RSBUS_USES_TCB2)
+#elif defined(RSBUS_USES_HW_TCB2)
   ISR(TCB2_INT_vect) {
-#elif defined(RSBUS_USES_TCB3)
+#elif defined(RSBUS_USES_HW_TCB3)
   ISR(TCB3_INT_vect) {
-#elif defined(RSBUS_USES_TCB4)
+#elif defined(RSBUS_USES_HW_TCB4)
   ISR(TCB4_INT_vect) {
 #endif
   // Note: the ISR automatically clears the pulse counter TCBx.CNT
   timer_INTFLAGS |= TCB_CAPT_bm;          // We had an interrupt. Clear!
   timer_CNT = rsISR.ccmpValue + 1;        // Revert clearing the pulse counter
-  if (rsISR.data4usartFlag) {
+  if (rsISR.data4IsrFlag) {
     // We have data to send, it is our turn and the decoder is synchronised
     // Note: general USART code often includes some kind of flow control, but that is not needed here
     *rsUSART.dataRegister = rsISR.data2send;
-    rsISR.data2sendFlag = false;        // RSbusConnection::sendNibble may now prepare new data
-    rsISR.data4usartFlag = false;       // CheckPolling may now select a new RS-bus address
+    rsISR.data2sendFlag = false;         // RSbusConnection::sendNibble may now prepare new data
+    rsISR.dataWasSendFlag = true;        // used to trigger retransmission after arrors
+    rsISR.data4IsrFlag = false;          // CheckPolling may now select a new RS-bus address
   } 
 }
 
-
-#endif // #if defined(RSBUS_USES_TCB....)
+#endif // #if defined(RSBUS_USES_HW_TCB....)

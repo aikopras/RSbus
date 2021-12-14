@@ -10,7 +10,7 @@
 // history:   2019-02-10 ap V0.1 Initial version
 //            2021-07-26 ap v0.2 Default type is now 'Feedback decoder'
 //            2021-09-30 ap v1.0 Different types of hardware are supported
-//            2021-11-29 ap v2.1 Retransmission added (irrespective of transmission errors)
+//            2021-11-29 ap v2.1 Forward Error Correction added (irrespective of transmission errors)
 //
 //
 //
@@ -59,7 +59,6 @@ volatile RSbusIsr rsISR;        // Interface to sup_isr*
 
 
 //******************************************************************************************************
-//******************************************************************************************************
 // The RSbusConnection class is needed for establishing a connection to the master station and
 // sending RS-bus messages. Per address a separate connection is needed.
 //******************************************************************************************************
@@ -85,9 +84,9 @@ RSbusConnection::RSbusConnection() {
   // decoder is connected to the master station.
   address = 0;                                 // Initialise to 0
   type = Feedback;                             // Default value
-  status = NotConnected;                       // state machine starts NotConnected
-  needConnect = false;                         // Initialise to false
-  retransmissions = 0;                         // Default: no retransmissions
+  status = notSynchronised;                    // state machine starts notSynchronised
+  feedbackRequested = false;                   // Initialise to false
+  forwardErrorCorrection = 0;                  // Default: no forward error correction
 }
 
 
@@ -128,8 +127,8 @@ void RSbusConnection::send4bits(Nibble_t nibble, uint8_t value) {
        | ((value & 0b00000100) <<3)  // move bit 5 to bit 2 (distance = 3)
        | ((value & 0b00001000) <<1)  // move bit 4 to bit 3 (distance = 1)
        | (nibbleValue<<NIBBLEBIT);
-  // If data should always be retransmitted, store the same nibble multiple times
-  for (uint8_t i = 0; i <= retransmissions; i++) {format_nibble(data);}
+  // If data should be send multiple times, store the same nibble multiple times
+  for (uint8_t i = 0; i <= forwardErrorCorrection; i++) {format_nibble(data);}
 }
 
     
@@ -142,7 +141,7 @@ void RSbusConnection::send8bits(uint8_t value) {
   uint8_t dataNibble1;
   uint8_t dataNibble2;
 // Sending 8 bits is sufficient to connect to the master
-  needConnect = false;
+  feedbackRequested = false;
   // send first nibble (for the low order bits
   dataNibble1 = ((value & 0b00000001) <<7)  // move bit 7 to bit 0 (distance = 7)
               | ((value & 0b00000010) <<5)  // move bit 6 to bit 1 (distance = 5)
@@ -155,15 +154,15 @@ void RSbusConnection::send8bits(uint8_t value) {
               | ((value & 0b01000000) >>1)  // move bit 1 to bit 2 (distance = -1)
               | ((value & 0b10000000) >>3)  // move bit 0 to bit 3 (distance = -3)
               | (1<<NIBBLEBIT);
-  // If data should always be retransmitted, store the same nibbles multiple times
-  for (uint8_t i = 0; i <= retransmissions; i++) {
+  // If data should be send multiple times, store the same nibbles multiple times
+  for (uint8_t i = 0; i <= forwardErrorCorrection; i++) {
     format_nibble(dataNibble1);
     format_nibble(dataNibble2);
   }
 }
 
 
-
+//******************************************************************************************************
 uint8_t RSbusConnection::sendNibble(void) {
   // Perform the checks here, since this part is less time critical then the ISR part, which get its input from here
   uint8_t result = 0;                          // Function return value
@@ -183,29 +182,30 @@ uint8_t RSbusConnection::sendNibble(void) {
 
 void RSbusConnection::checkConnection(void) {
   // This function maintains the statemachine for the RS-bus connection, and should be called from main frequestly
-  if (rsbusHardware.masterIsSynchronised) {    // The decoder has detected the start of a new polling cyclus
+  if (rsbusHardware.rsSignalIsOK) {            // The decoder has received a polling cyclus (without errors)
     switch (status) {
-      case NotConnected : 
-        status = ConnectionIsNeeded;           // status is used for our internal (private) statemachine
-        needConnect = true;                    // used as external (public) flag towards main() and send8bits()
+      case notSynchronised :
+        status = feedbackIsNeeded;             // status is used for our internal (private) statemachine
+        feedbackRequested = true;              // used as external (public) flag towards main() and send8bits()
         break;
-      case ConnectionIsNeeded: 
-        if (needConnect == false) status = ConnectNibble1;
+      case feedbackIsNeeded:
+        if (feedbackRequested == false) status = feedbackNibble1;
         break;
-      case ConnectNibble1:
-        if (RSbusConnection::sendNibble()) status = ConnectNibble2;
+      case feedbackNibble1:
+        if (RSbusConnection::sendNibble()) status = feedbackNibble2;
         break;
-      case ConnectNibble2:
-        if (RSbusConnection::sendNibble()) status = Connected;
+      case feedbackNibble2:
+        if (RSbusConnection::sendNibble()) status = connected;
         break;
-      case Connected:
+      case connected:
         RSbusConnection::sendNibble();
         break;
     }
   }
   else {
-    status = NotConnected;                     // No RS-bus signal, so connection is lost
+    status = notSynchronised;                  // No RS-bus signal, or count / parity errors are detected
     my_fifo.empty();                           // Drop all data that is still waiting in the FIFO for transmission
+    rsISR.data2sendFlag = false;               // Cancel possible data waiting for ISR
   }
 }
 

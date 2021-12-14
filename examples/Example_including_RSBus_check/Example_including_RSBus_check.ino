@@ -45,7 +45,7 @@ void loop() {
   // For testing purposes we try every second to send 8 bits (2 messages)
   if ((millis() - T_last) > 1000) {
     T_last = millis();
-    if (rsbusHardware.masterIsSynchronised) {
+    if (rsbusHardware.rsSignalIsOK) {
       digitalWrite(ledPin, 1);       // We have a valid RS-Bus signal
       rsbus.send8bits(value);        // Tell the library to buffer these 8 bits for later sending
       switch (value) {
@@ -63,8 +63,9 @@ void loop() {
     else digitalWrite(ledPin, 0);    // No valid RS-Bus signal
   }
   // Next functions should be called from main as often as possible
-  // If a RS-Bus feedback decoder starts, it needs to connect to the master station
-  if (rsbus.needConnect) rsbus.send8bits(0);
+  // If a RS-Bus feedback decoder starts, or after certain errors,
+  // it needs to send its feedback data to the master station
+  if (rsbus.feedbackRequested) rsbus.send8bits(0);
   rsbusHardware.checkPolling();      // Listen to RS-Bus polling messages for our turn
   rsbus.checkConnection();           // Check if the buffer contains data, and give this to the ISR and USART
 }

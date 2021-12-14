@@ -1,45 +1,20 @@
 //******************************************************************************************************
 //
-// file:      sup_isr_sw.cpp
+// file:      sup_isr_sw_tcb.cpp
 // purpose:   Support file for the RS-bus library. 
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted 
 //            by the master. Once this decoder is polled, the ISR can send data back via its USART. 
-// history:   2019-01-30 ap V0.1 Initial version
-//            2021-08-18 ap V0.2 millis() replaced by flag
-//            2021-10-12 ap V1.0 Check every 2ms and ability to detect parity errors
+//            Uses a TCB in Periodic Interrupt mode to count the number and measure the length
+//            (=duration) of pulses transmitted by the master.
+//            Of all variants, this should be the most reliable option for the RS-bus.
+//            This option only exists on MegaCoreX and DxCore processors, but not on
+//            traditional ATmega processors (such as the UNO).
+// history:   2021-12-13 ap V1.0 Initial version
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
 //
 // For details, see: ../extras/BasicOperation.md
-//
-// The rs_interrupt() ISR is called whenever a transistion is detected on the RS-bus.
-// Such transistion indicates that the next feedback decoder is allowed to send information.
-// To determine which decoder has its turn, the ISR increments at each transition the
-// 'addressPolled' variable. 
-// If data is made available by the main sketch (the 'data2sendFlag' is set and the data has been
-// entered into the 'data2send' variable), the data will be send once the 'addressPolled' variable
-// matches the address ('address2use') of this decoder (with offset 1).
-//
-//         <-0,2ms->                                       <-------------7ms------------->
-//    ____      ____      ____              ____      ____                                 ____
-//   |    |    |    |    |    |            |    |    |    |                               |    |
-//  _|    |____|    |____|    |____________|    |____|    |_______________________________|    |__ Rx
-//        ++        ++        ^                 ++       =130                                 1
-//                            |                                               
-//                        my address                                         
-//                                                                   
-// ____________________________XXXXXXXXY___________________________________________________________Tx
-//                             <1,875ms>
-//
-// CheckPolling() is called from the main loop as often as possible. Every 2 milliseconds it
-// compares the value of 'addressPolled' to the value stored in 'lastPulseCnt' during the previous
-// check. If both values match, we (very likely) have a period of silence.
-// See for details: ../extras/BasicOperation-CheckPolling.md
-//
-// Used hardware and software:
-// - INTx: used to receive RS-bus information from the command station
-// - TXD/TXDx: used to send RS-bus information to the command station (USART)
 //
 //******************************************************************************************************
 #include <Arduino.h>
@@ -47,8 +22,11 @@
 #include "sup_isr.h"
 #include "sup_usart.h"
 
-// This code is the default: it is only used if we didn't specify in RSbus.h any other directive
-#if defined(RSBUS_USES_SW)
+// This code will only be used if we define in RSbusVariants.h the "RSBUS_USES_SW_TCB" directive
+#if defined(RSBUS_USES_SW_TCB0) || defined(RSBUS_USES_SW_TCB1) || defined(RSBUS_USES_SW_TCB2) || \
+defined(RSBUS_USES_SW_TCB3) || defined(RSBUS_USES_SW_TCB4)
+#include <Event.h>
+
 
 //******************************************************************************************************
 // The following objects are instantiated elsewhere, but are used here
@@ -56,6 +34,9 @@ extern RSbusHardware rsbusHardware;  // instantiated in "RS-bus.cpp"
 extern volatile RSbusIsr rsISR;      // instantiated in "RS-bus.cpp"
 extern USART rsUSART;                // instantiated in "sup_usart.cpp" We only use init()
 
+
+static volatile TCB_t* _timer;       // In init and detach we use a pointer to the timer
+#define T180uS F_CPU / 1000000 * 180 // RS-bus pulses shorter than 180us will trigger an error
 
 //******************************************************************************************************
 // RSbusIsr: constructor
@@ -75,17 +56,83 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
 
 //******************************************************************************************************
 //******************************************************************************************************
-// The RSbusHardware class is responsible for controlling the RS-bus hardware, thus an ISR
-// connected to an (interrupt) input pin that counts the polling pulses send by the master, and
-// the USART connected to an output pin to send messages from the decoder to the master.
+// The RSbusHardware class is responsible for controlling the RS-bus hardware, thus the TCB that counts
+// the polling pulses send by the master, and the USART connected to an output pin to send messages
+// to the master.
 // Messages are: 8 bit, no parity, 1 stop bit, asynchronous mode, 4800 baud.
-// The 'attach' method makes the connection between input pin and ISR, initialises the USART and
-// sets the USART dataRegister to the right USART (UDR, UDR0, UDR1, UDR2 or UDR3)
-// A detach method is available to disable the ISR, which is needed before a decoder gets restarted.
-// Note regarding the code: instead of the 'RSbusHardware::attach' method we could have directly used
-// the RSbusIsr and USART class constructors. However, since we also need a 'RSbusHardware::detach' method
-// to stop the rs_interrupt service routine, for symmetry reasons we have decided for an 'attach'
-// and 'detach'.
+// The "attach" method initialises the TCB and USART.
+// A detach method is available to disable the TCB, which is needed before a decoder gets restarted.
+// Note regarding the code: instead of the "RSbusHardware::attach" method we could have directly used
+// the RSbusIsr and USART class constructors. However, since we also need a "RSbusHardware::detach" method
+// to stop the rs_interrupt service routine, for symmetry reasons we have decided for an "attach"
+// and "detach".
+
+void initTcb(void) {
+  // Step 1: Instead of calling a specific timer directly, in init and detach we use a pointer to the
+  // selected timer. However, since pointers add a level of indirection, the registers that we use
+  // (EVCTRL and CCMP) will be directly accessed via #defines
+#if defined(RSBUS_USES_SW_TCB0)
+  _timer = &TCB0;
+  #define timer_EVCTRL TCB0_EVCTRL
+  #define timer_CCMP   TCB0_CCMP
+#elif defined(RSBUS_USES_SW_TCB1)
+  _timer = &TCB1;
+  #define timer_EVCTRL TCB1_EVCTRL
+  #define timer_CCMP   TCB1_CCMP
+#elif defined(RSBUS_USES_SW_TCB2)
+  _timer = &TCB2;
+  #define timer_EVCTRL TCB2_EVCTRL
+  #define timer_CCMP   TCB2_CCMP
+#elif defined(RSBUS_USES_SW_TCB3)
+  _timer = &TCB3;
+  #define timer_EVCTRL TCB3_EVCTRL
+  #define timer_CCMP   TCB3_CCMP
+#elif defined(RSBUS_USES_SW_TCB4)
+  _timer = &TCB4;
+  #define timer_EVCTRL TCB4_EVCTRL
+  #define timer_CCMP   TCB4_CCMP
+#endif
+  // Step 2: fill the registers. See the data sheets for details
+  noInterrupts();
+  // Clear the main timer control registers. Needed since the Arduino core creates some presets
+  _timer->CTRLA = 0;
+  _timer->CTRLB = 0;
+  _timer->EVCTRL = 0;
+  _timer->INTCTRL = 0;
+  _timer->CCMP = 0;
+  _timer->CNT = 0;
+  _timer->INTFLAGS = 0;
+  // Initialise the control registers
+  _timer->CTRLA = TCB_ENABLE_bm;                    // Enable the TCB peripheral, clock is CLK_PER (=F_CPU)
+  _timer->CTRLB = TCB_CNTMODE_FRQ_gc;               // Input Capture Frequency Measurement mode
+//  _timer->EVCTRL = TCB_CAPTEI_bm | TCB_FILTER_bm;   // Enable input capture events and noise cancelation
+  _timer->EVCTRL = TCB_CAPTEI_bm;   // Enable input capture events and noise cancelation
+  _timer->INTCTRL |= TCB_CAPT_bm;                   // Enable CAPT interrupts
+  interrupts();
+}
+
+
+void initEventSystem(uint8_t rxPin) {
+  noInterrupts();
+  // Assign Event generator: a positive edge on the RS-bus input pin starts the timer
+  Event& myEvent = Event::assign_generator_pin(rxPin);
+  // Set Event Users
+  #if defined(RSBUS_USES_SW_TCB0)
+    myEvent.set_user(user::tcb0_capt);
+  #elif defined(RSBUS_USES_SW_TCB1)
+    myEvent.set_user(user::tcb1_capt);
+  #elif defined(RSBUS_USES_SW_TCB2)
+    myEvent.set_user(user::tcb2_capt);
+  #elif defined(RSBUS_USES_SW_TCB3)
+    myEvent.set_user(user::tcb3_capt);
+  #elif defined(RSBUS_USES_SW_TCB4)
+    myEvent.set_user(user::tcb4_capt);
+  #endif
+  // Start the event channel
+  myEvent.start();
+  interrupts();
+}
+
 
 RSbusHardware::RSbusHardware() {                     // Constructor
   rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
@@ -104,12 +151,22 @@ void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
   // Use swapUsartPin to set the defaultUsartPins parameter.
   rsUSART.init(usartNumber, !swapUsartPin);
   // Step 2: attach the interrupt to the RSBUS_RX pin.
-  if (interruptModeRising) attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, RISING);
-  else attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, FALLING);
+  initTcb();
+  initEventSystem(rxPin);
 }
 
 void RSbusHardware::detach(void) {
-  detachInterrupt(digitalPinToInterrupt(rxPinUsed));
+  noInterrupts();
+  // Clear all TCB timer settings
+  // For "reboot" (jmp 0) it is crucial to set INTCTRL = 0
+  _timer->CTRLA = 0;
+  _timer->CTRLB = 0;
+  _timer->EVCTRL = 0;
+  _timer->INTCTRL = 0;
+  _timer->CCMP = 0;
+  _timer->CNT = 0;
+  _timer->INTFLAGS = 0;
+  interrupts();
 }
 
 
@@ -205,20 +262,38 @@ void RSbusHardware::checkPolling(void) {
 
 
 //******************************************************************************************************
-// Define the Interrupt Service routines (ISR) for the RS-bus
+// Define the TCB-based Interrupt Service routine (ISR) for the RS-bus
 //******************************************************************************************************
-void rs_interrupt(void) {
-  if (rsISR.data4IsrFlag) {
-    if (rsISR.address2use == rsISR.addressPolled) {
-      // We have data to send, it is our turn and the RSbus signal is valid
-      // Note: general USART code often includes some kind of flow control, but that is not needed here
-      *rsUSART.dataRegister = rsISR.data2send;
-      rsISR.data2sendFlag = false;         // RSbusConnection::sendNibble may now prepare new data
-      rsISR.data4IsrFlag = false;          // CheckPolling may reset the flag, is there is data2send
-      rsISR.dataWasSendFlag = true;        // used to trigger retransmission after arrors
+// Select the corresponding ISR
+#if defined(RSBUS_USES_SW_TCB0)
+  ISR(TCB0_INT_vect) {
+#elif defined(RSBUS_USES_SW_TCB1)
+  ISR(TCB1_INT_vect) {
+#elif defined(RSBUS_USES_SW_TCB2)
+  ISR(TCB2_INT_vect) {
+#elif defined(RSBUS_USES_SW_TCB3)
+  ISR(TCB3_INT_vect) {
+#elif defined(RSBUS_USES_SW_TCB4)
+  ISR(TCB4_INT_vect) {
+#endif
+  uint16_t delta = timer_CCMP;             // Delta holds the time since the previous interrupt
+  if (delta <= T180uS)
+    // Pulse count error. We lost track of where we are within the current pulse train.
+    // Therefore don't transmit during this pulse train, and let checkPolling() decide what to do
+    rsISR.data4IsrFlag = false;
+  else {
+    if (rsISR.data4IsrFlag) {
+      if (rsISR.address2use == rsISR.addressPolled) {
+        // We have data to send, it is our turn and the RSbus signal is valid
+        // Note: general USART code often includes some kind of flow control, but that is not needed here
+        *rsUSART.dataRegister = rsISR.data2send;
+        rsISR.data2sendFlag = false;         // RSbusConnection::sendNibble may now prepare new data
+        rsISR.data4IsrFlag = false;          // CheckPolling may reset the flag, is there is data2send
+        rsISR.dataWasSendFlag = true;        // used to trigger retransmission after arrors
+      }
     }
   }
   rsISR.addressPolled ++;                  // Address of slave that gets his turn next
 }
 
-#endif // #ifndef (RSBUS_USES_RTC || RSBUS_USES_SW_4MS)
+#endif // #if defined(RSBUS_USES_SW_TCB....)

@@ -95,8 +95,9 @@ void loop() {
      }
   }
   // Next functions should be called from main as often as possible
-  // If a RS-Bus feedback decoder starts, it needs to connect to the master station
-  if (rsbus.needConnect) rsbus.send8bits(0);
+  // If a RS-Bus feedback decoder starts, or after certain errors,
+  // it needs to send its feedback data to the master station
+  if (rsbus.feedbackRequested) rsbus.send8bits(0);
   rsbusHardware.checkPolling();      // Listen to RS-Bus polling messages for our turn
   rsbus.checkConnection();           // Check if the buffer contains data, and give this to the ISR and USART
 }

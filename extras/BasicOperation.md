@@ -61,10 +61,10 @@ ISR(...) {
 }
 ```
 ## Connecting to the master station ##
-After start-up, or after the master station resets, the decoder should first connect to the master by sending two 4 bit messages (the high and low order nibble) in two consecutive cycles. To signal that such connect is needed, the `needConnect` flag is set by the `checkConnection()` method. Upon start-up, this flag is initialised to zero (no need to connect yet, since the beginning of a new polling cycle has not yet been detected). This flag is also set to zero if the RS-bus master resets (which, according to the Der-Moba website, the master indicates by sending a pulse of 88 ms, followed by silence period of roughly 562 ms). The `checkConnection()` method maintains a state machine to determine if we are in the start-up phase, if the start of a new polling cycle has been detected, if we already have send both connection nibbles and if we are connected.
+After start-up, or after the master station resets, the decoder should first connect to the master by sending two 4 bit messages (the high and low order nibble) in two consecutive cycles. To signal that such connect is needed, the `feedbackRequested` flag is set by the `checkConnection()` method. Upon start-up, this flag is initialised to false (no need to connect yet, since the beginning of a new polling cycle has not yet been detected). This flag is cleared whenever the RS-signal is lost (no pulses are seen for a longer period) or, depending on the specific error handling settings, after pulse or parity errors . The `checkConnection()` method maintains a state machine to determine if we are in the start-up phase, if the start of a new polling cycle has been detected, if we already have send both connection nibbles and if we are connected.
 
 ## Master station start-up ##
-When the (LZV) Master Station start-up, it sends a pulse of around 270ms, followed by a period of silence or roughly 560ms. This period should be sufficient for feedback decoders to initialise its hard and software components. After this silence period is over, the first train of 130 pulses will be send by the master station. As can be seen in the figure below, the decoders using this library wait until the first pulse train is over before they connect to the master station.
+When the (LZV) Master Station start-up, it sends a pulse of around 270ms, followed by a period of silence or rughly 560ms. This period should be sufficient for feedback decoders to initialise its hard and software components. After this silence period is over, the first train of 130 pulses will be send by the master station. As can be seen in the figure below, the decoders using this library wait until the first pulse train is over before they connect to the master station.
 ![RSBus-Startup](RSBus-Startup.png)
 
 
@@ -80,6 +80,8 @@ This larger period of silence can be used by a feedback decoder to retransmit th
 ![RSBus-Address-127-Parity-Error](RSBus-Address-127-Parity-Error.png)
 
 In case of unexpected TT-bits, such as *Switch decoder without feedback* (00) or *reserved for future use* (11), the silence period remains 7ms, thus such bit values are not treated as errors.
+
+A description of what to do after a parity (or other) error is given in [BasicOperation-ErrorHandling.md](BasicOperation-ErrorHandling.md).
 
 # Implementation #
 
@@ -110,8 +112,8 @@ The main advantage of these two approaches is that the number of interrupts is d
 A disadvantage of the RTC case is that the RS-bus input signal *must* be connected to the EXTCLK pin that belongs to that clock (PA0). In case of the TCB variant the RS-bus input signal can be connected to any available pin that is supported by the Event System. A disadvantage of the TCB variant, however, is that one of the (often scarce) TCB peripherals must be allocated to the RS-bus transmission logic. In addition, only DxCore controllers support the use of TCB as pulse counter.
 
 See for additional information the headers of:
-- [../src/sup_isr_rtc.cpp](../src/sup_isr_rtc.cpp)
-- [../src/sup_isr_tcb.cpp](../src/sup_isr_tcb.cpp)
+- [../src/sup_isr_hw_rtc.cpp](../src/sup_isr_hw_rtc.cpp)
+- [../src/sup_isr_hw_tcb.cpp](../src/sup_isr_hw_tcb.cpp)
 
 ## Version 1 ##
 The first version of this RS-bus library used a slightly different software-based approach. Details can be found [here](BasicOperation-Initial_Version.md).

@@ -36,8 +36,7 @@ The way `currentCnt` is determined, depends on the way pulse are counted:
 - In case of TCB-based counting, we use the `TCBx_CNT` register that is updated every time the TCBx receives a (RS-bus) clock pulse.
 
 #### What to do during the silence period ####
-As shown in the figure below, we only become active if `timeIdle` is equal to 3 or, in case a parity error is detected, `timeIdle` is equal to 5. In case of a parity error the `parityErrors` counter will be increased, and the `parityErrorFlag` will be set. The main program may monitor the `parityErrors` counter, and if this counter is regularly increased there may be a problem with the RS-bus. Possible causes include cabling problems, but it can also be that two feedback decoders use the same RS-bus address.
-The `parityErrorFlag` indicates if there was a parity error during the last cycle. The main sketch can check this flag, and in case the flag is set the decoder may resend the last feedback message, provided this message was send in the previous cycle. The `parityErrorFlag` will automatically be cleared after the next polling cycle.
+As shown in the figure below, we only become active if `timeIdle` is equal to 3 or, in case a parity error is detected, `timeIdle` is equal to 5. In case of a parity error the `parityErrors` counter will be increased. The main program may monitor the `parityErrors` counter, and if this counter is regularly increased there may be a problem with the RS-bus. Possible causes include cabling problems, external interference but it can also be that two feedback decoders use the same RS-bus address.
 ![checkPolling](Approach-Timing-3.png)
 ```
 switch (rsISR.timeIdle) {                        // See figures above
@@ -48,16 +47,13 @@ switch (rsISR.timeIdle) {                        // See figures above
   break;
   case 3:                                        // Third check => Check if things are OK
     ...
-    parityErrorFlag = false;                     // Cycle is over. Clear flag
   break;
   case 5:                                        // Fifth check: 8ms of silence => parity error
-    parityErrorFlag = true;                      // Retransmission may be attempted in next cycle
     parityErrors++;                              // Keep track of number of parity errors
   break;
   case 7:                                        // Seventh check: 12ms of silence => signal loss
-    parityErrorFlag = false;                     // Wasn't a parity error after all
     parityErrors--;                              // Wasn't a parity error after all
-    masterIsSynchronised = false;                // But worse: a RS-bus signal loss
+    rsSignalIsOK = false;                        // But worse: a RS-bus signal loss
     rsISR.data2sendFlag = false;                 // Cancel possible data waiting for ISR
     rsISR.data4usartFlag = false;                // Cancel possible data waiting for ISR
   break;
@@ -69,4 +65,7 @@ switch (rsISR.timeIdle) {                        // See figures above
 The code above also shows that we may detect longer (than 12ms) periods of silence. Such long periods of silence means that we lost the RS-bus input signal. In case the signal reappears later, the feedback decoder needs to be synchronised again.
 
 #### Check if we are synchronised ####
-During the third check we will investigate if we counted 130 pulses during the previous cycle. If that is the case, things are OK and we may set the `masterIsSynchronised` flag to denote that we detected the start of a new RS-bus polling cycle. If we did not count 130 pulses, the decoder is not synchronised to the master station and the `masterIsSynchronised` flag should be cleared. If things are OK, the pulse counter must be reset. How this is done depends on the decoding mechanism being used (software, RTC or TCBx); for details see the respective .cpp files.
+During the third check we will investigate if we counted 130 pulses during the previous cycle. If that is the case, things are OK and we may set the `rsSignalIsOK` flag to denote that we detected the start of a new RS-bus polling cycle. If we did not count 130 pulses, the decoder is not synchronised to the master station and the `rsSignalIsOK` flag should be cleared. If things are OK, the pulse counter must be reset. How this is done depends on the decoding mechanism being used (software, RTC or TCBx); for details see the respective .cpp files.
+
+## Error Handling ##
+Depending of the specific error that occurs, this library can take several error correcting actions. A description of these actions is given in [BasicOperation-ErrorHandling.md](BasicOperation-ErrorHandling.md).

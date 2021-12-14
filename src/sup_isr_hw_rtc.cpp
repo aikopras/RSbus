@@ -1,6 +1,6 @@
 //******************************************************************************************************
 //
-// file:      sup_isr_rtc.cpp
+// file:      sup_isr_hw_rtc.cpp
 // purpose:   Support file for the RS-bus library. 
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted by
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
@@ -103,7 +103,7 @@
 //  | |_| |_| |_| |_| |_| |_| |__________________________________________________| |_| |_
 //                             <--------------------- 10,7ms -------------------> 
 //
-//************************************************************************************************
+//******************************************************************************************************
 #include <Arduino.h>
 #include "RSbus.h"
 #include "sup_isr.h"
@@ -113,21 +113,26 @@
 #if defined(RSBUS_USES_RTC)
 
 
-//************************************************************************************************
+//******************************************************************************************************
 // The following objects are instantiated elsewhere, but are used here
 extern RSbusHardware rsbusHardware;  // instantiated in "RS-bus.cpp"
 extern volatile RSbusIsr rsISR;      // instantiated in "RS-bus.cpp"
 extern USART rsUSART;                // instantiated in "sup_usart.cpp" We only use init()
 
 
-//**********************************************************************************************
+//******************************************************************************************************
 // RSbusIsr: constructor
-//**********************************************************************************************
-RSbusIsr::RSbusIsr(void) {           // Define the constructor
-  data2send = 0;                     // Empty our send data byte
-  data2sendFlag = false;             // No, we don't have anything to send yet
-  lastPulseCnt = RTC.CNT;            // RTC.CNT value
-  tLastCheck = millis();             // Current time
+//******************************************************************************************************
+RSbusIsr::RSbusIsr(void) {       // Define the constructor
+  lastPulseCnt = RTC.CNT;        // RTC.CNT value
+  data4IsrFlag = false;          // ISR acts on data4IsrFlag, instead of data2sendFlag
+  address2use = 0;               // Initialise address to 0
+  data2send = 0;                 // Empty our send data byte
+  data2sendFlag = false;         // No, we don't have anything to send yet
+  dataWasSendFlag = false;       // No, we didn't send anything yet
+  flagParity = false;            // No, we don't need to retranmit after a parity error
+  flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
+  tLastCheck = millis();         // Current time
 }
 
    
@@ -145,18 +150,22 @@ RSbusIsr::RSbusIsr(void) {           // Define the constructor
 // and "detach".
 
 RSbusHardware::RSbusHardware() {                     // Constructor
-  masterIsSynchronised = false;                      // Is RTC.CNT zero in the silence period
+  rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
+  swapUsartPin = false;                              // We use the default USART TX pin
+  interruptModeRising = true;                        // Earlier hardware triggered on FALLING
   parityErrors = 0;                                  // Counter for the number of 10,7ms gaps
-  parityErrorFlag = false;                           // Flag for the previous cycle
+  pulseCountErrors = 0;                              // Number of times a cycli did not have 130 pulses
+  parityErrorHandling = 1;                           // Default: if we have just send data, retransmit!
+  pulseCountErrorHandling = 2;                       // Default: always retransmit all feedback data
 }
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
   rxPinUsed = rxPin;                                 // included, to avoid compiler warnings
   rxPinUsed = PIN_PA0;                               // PA0 = EXTCLK
-  // Initialise the RS bus transmission hardware (USART)
+  // Step 1: Initialise the RS bus transmission hardware (USART)
   rsUSART.init(usartNumber, !swapUsartPin);
-  // Initialise the RTC
+  // Step 2: Initialise the RTC
   while (RTC.STATUS > 0) { ;}                        // Wait for all register to be synchronized
   RTC.CLKSEL = 0;                                    // Reset the main timer control registers
   RTC.CTRLA = 0;
@@ -177,9 +186,31 @@ void RSbusHardware::detach(void) {
 }
 
 
-//************************************************************************************************
+//******************************************************************************************************
+void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted) {
+  // Retransmissions can be triggered by clearing the rsSignalIsOK flag.
+  // If this flag is cleared, checkConnection() sets the status to 'notSynchronised'
+  // empties the FIFO and clears the data2SendFlag.
+  // This will trigger the main sketch to retransmit (all 8 bits of) feedback data
+  switch (strategy) {
+    case 0:                                  // Do nothing
+    break;
+    case 1:                                  // Signal an error if we just transmitted
+      if (justTransmitted) rsSignalIsOK = false;
+    break;
+    case 2:                                  // Always signal an error
+      rsSignalIsOK = false;                  // Will trigger a retransmission
+    break;
+    default:                                 // Ignore
+    break;
+  }
+  // If the application will retransmit, we can cancel data ready for transmission
+  if (rsSignalIsOK == false) rsISR.data4IsrFlag = false;
+}
+
+//******************************************************************************************************
 // checkPolling(): Called from main as frequent as possible
-//************************************************************************************************
+//******************************************************************************************************
 // See for details: ../extras/BasicOperation-CheckPolling.md
 // Every 2ms we check if RTC.CNT has changed or not  
 // CheckPolling() ignores all checks, except check 3 and check 5
@@ -203,31 +234,35 @@ void RSbusHardware::checkPolling(void) {
       case 4:                                          // Same as case 3, nothing new
       case 6:                                          // Same as case 5, nothing new
       break;
-      case 3:                                          // Third check 
+      case 3:                                          // Third check => SILENCE!
+        // Set flags for possible retransmission
+        rsISR.flagPulseCount = rsISR.dataWasSendFlag;  // ISR may set the dataWasSendFlag
+        rsISR.flagParity     = rsISR.dataWasSendFlag;  // and flags may trigger retransmission
+        rsISR.dataWasSendFlag = false;                 // but only is previous cycle had errors
         if (currentCnt == 0) {                         // Figure: case 1A)
-          masterIsSynchronised = true;
+          rsSignalIsOK = true;
           if (rsISR.data2sendFlag) {
-            if (RTC.CMP == rsISR.address2use)
-              rsISR.data4usartFlag = true;
+            if (RTC.CMP == rsISR.address2use) rsISR.data4IsrFlag = true;
           }
         }
         else {                                         // RTC Overflow out of sync
           RTC.CNT = 3;                                 // RTC register updates takes 2 cycles
-          masterIsSynchronised = false;                // Not synchronised:
-          rsISR.data2sendFlag = false;                 // Cancel possible data waiting for ISR
+          if (rsSignalIsOK) {                          // Do nothing during initialisation
+            pulseCountErrors ++;
+            triggerRetransmission(pulseCountErrorHandling, rsISR.flagPulseCount);
+          }
         }
-        parityErrorFlag = false;                       // Cycle is over. Clear flag
       break;
       case 5:                                          // 8ms of silence
-        parityErrorFlag = true;                        // Retransmission may be attempted in next cycle
-        parityErrors++;                                // Keep track of number of parity errors
+        if (rsSignalIsOK) {                            // Only act if everything was OK before
+          parityErrors++;                              // Keep track of number of parity errors
+          triggerRetransmission(parityErrorHandling, rsISR.flagParity);
+        }
       break;
       case 7:                                          // 12ms of silence
-        parityErrorFlag = false;                       // Wasn't a parity error
-        parityErrors--;                                // Wasn't a parity error
-        masterIsSynchronised = false;                  // But worse: a RS-bus signal loss
-        rsISR.data2sendFlag = false;                   // Cancel possible data waiting for ISR
-        rsISR.data4usartFlag = false;                  // Cancel possible data waiting for ISR
+        if (rsSignalIsOK) parityErrors--;              // Wasn't a parity error
+        rsSignalIsOK = false;                          // But worse: a RS-bus signal loss
+        rsISR.data4IsrFlag = false;                    // Cancel possible data waiting for ISR
       break;
       default:                                         // Silence >= 14ms
       break;
@@ -241,20 +276,21 @@ void RSbusHardware::checkPolling(void) {
 }
 
 
-//************************************************************************************************
+//******************************************************************************************************
 // Define the RTC-based Interrupt Service routines (ISR) for the RS-bus
-//************************************************************************************************
+//******************************************************************************************************
 ISR(RTC_CNT_vect) {
-  // Do we have an Compare Match or an Overflow?
+  // Do we have an Compare Match or an Overflow Interrupt?
   if (RTC.INTFLAGS == RTC_CMP_bm) {        // Compare Match
     RTC.INTFLAGS |= RTC_CMP_bm;            // Clear Compare Match interrupt
-    if (rsISR.data4usartFlag) {
-      // We have data to send, it is our turn and the decoder is synchronised
+    if (rsISR.data4IsrFlag) {
+      // We have data to send, it is our turn and the RSbus signal is valid
       // Note: general USART code often includes some kind of flow control, but that is not needed here
       *rsUSART.dataRegister = rsISR.data2send;
-      rsISR.data2sendFlag = false;
-      rsISR.data4usartFlag = false;
-    } 
+      rsISR.data2sendFlag = false;         // RSbusConnection::sendNibble may now prepare new data
+      rsISR.data4IsrFlag = false;          // CheckPolling may reset the flag, is there is data2send
+      rsISR.dataWasSendFlag = true;        // used to trigger retransmission after arrors
+    }
     // Modify, if the next data byte must be send from a different RS-bus address
     if (RTC.CMP != rsISR.address2use) RTC.CMP = rsISR.address2use;
   }
