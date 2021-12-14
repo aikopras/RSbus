@@ -105,8 +105,7 @@ void initTcb(void) {
   // Initialise the control registers
   _timer->CTRLA = TCB_ENABLE_bm;                    // Enable the TCB peripheral, clock is CLK_PER (=F_CPU)
   _timer->CTRLB = TCB_CNTMODE_FRQ_gc;               // Input Capture Frequency Measurement mode
-//  _timer->EVCTRL = TCB_CAPTEI_bm | TCB_FILTER_bm;   // Enable input capture events and noise cancelation
-  _timer->EVCTRL = TCB_CAPTEI_bm;   // Enable input capture events and noise cancelation
+  _timer->EVCTRL = TCB_CAPTEI_bm | TCB_FILTER_bm;   // Enable input capture events and noise cancelation
   _timer->INTCTRL |= TCB_CAPT_bm;                   // Enable CAPT interrupts
   interrupts();
 }
