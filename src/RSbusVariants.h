@@ -31,7 +31,7 @@
 // For AtMegaX and DxCore processors a more efficient and reliable approach is to replace the
 // standard external pin interrupt (which is initialised using attachInterrupt()), with a TCB
 // interrupt that gets triggered via the Event System. This is therefore the default approach
-// for AtMegaX and DxCore processors that implement TCB3; which are processors with 40 pins
+// for AtMegaX and DxCore processors that implement TCB2 / TCB3; which are processors with 40 pins
 // or more. Examples are the 4809 and AVR128DA48.
 // Compared to RSBUS_USES_SW, this approach has the following advantages:
 // - TCB interrupts triggered via the Event System are faster than external pin interrupts
@@ -39,8 +39,8 @@
 //   improve reliability
 // - Noise cancelation is possible if a TCB is configured as Event user. Short spikes on the
 //   RS-Bus RX pin will than be filtered, and reliability will again be improved.
-// TCB0 may already be in use by the AP-DCC-Lib, TCB1 by the servo lib and TCB2 by millis().
-// Therefore TCB3 was selected as default.
+// TCB0 may already be in use by the AP-DCC-Lib, TCB1 by the servo lib and TCB2 (DxCore) or TCB3 (MegaCoreX) by millis().
+// Therefore TCB2 (MegaCoreX) or TCB3 (DxCore) was selected as default.
 //
 // RSBUS_USES_RTC (V2)
 // ===================

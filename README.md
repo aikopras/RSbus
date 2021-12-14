@@ -1,4 +1,4 @@
-# RSbus (Version 2) #
+# RSbus (Version 2.2) #
 
 This Arduino library can be used to send feedback information from a decoder to the master station via the (LENZ) RS-bus. The RS-bus is the standard feedback bus used for Lenz products, and supported by several other vendors. As opposed to some other feedback systems, the RS-Bus implements a current loop (instead of voltage levels) for signalling, making the transmission less susceptible to noise and interference. RS-Bus packets also include a parity bit to provide some form of error detection, and the command station notifies the feedback decoders if it has detected such parity error. For more information on the RS-bus see the [der-moba website](http://www.der-moba.de/index.php/RS-Rückmeldebus) (in German) and [https://sites.google.com/site/dcctrains/rs-bus-feed](https://sites.google.com/site/dcctrains/rs-bus-feed). To understand the design decisions behind, and implementation of this library, see the file [Basic operation](extras/BasicOperation.md) for further details.
 
@@ -32,8 +32,13 @@ Below an overview of (some) processors that support multiple USARTs.
 Version 2 (V2) of the RS-bus library supports different RS-bus routines for different ATMega controllers and software.
 To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusVariants.h).
 
-- **The default approach (V2):**
-  The default approach is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
+- **The default approach for traditional AtMega processors (V2):**
+  The default approach for traditional AtMega processors (Uno, Nano, Mega, ...) is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
+
+- **The default approach for new AtMega processors (V2):**
+  The default approach for new AtMega processors with 40 pins or more is also a software-based approach. Examples of such new AtMega processors are the 4809 (which is used on the Nano Every) and the AVR128DA48. The boards needed for these newer processors are  MegaCoreX and DxCore. Also in this approach an interrupt is raised after each RS-bus transition. However, this approach is more efficient and reliable, since the standard external pin interrupt (which is initialised using attachInterrupt()) is replaced by a TCB
+ interrupt that gets triggered via the Event System. Such interrupts are considerably faster than the external pin interrupts used in the previous approach. In addition, the TCB timer can efficiently measure the precise duration of each RS-bus pulse, and thereby
+improve reliability. Finally noise cancelation is possible if the TCB is configured as Event user. Short spikes on the RS-Bus RX pin will than be filtered, and reliability will again be improved. Depending on the board, TCB2 is used as default (MegaCoreX) or TCB3 (DxCore).
 
 - **RSBUS_USES_RTC (V2):**
   An alternative approach is to use the Real Time Clock (RTC) of the modern ATMegaX and DxCore processors (such as 4808, 4809, 128DA48 etc). This code puts less load on the CPU but has as disadvantage that the RS-Bus input signal *MUST* be connected to pin PA0 (ExtClk). This approach requires installation of the MegaCoreX or DxCore board software. ***=> recommended for newer processors on MegaCoreX / DxCore boards. Requires pin PA0!***
