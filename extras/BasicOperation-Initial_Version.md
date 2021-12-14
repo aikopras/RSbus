@@ -2,7 +2,7 @@
 # RS-bus - Version 1 #
 
 The rs_interrupt() ISR is called whenever a transition is detected on the RS-bus. Such transition indicates that the next feedback decoder is allowed to send information. To determine which decoder has its turn, the ISR increments at each transition the `addressPolled` variable. If data is made available to the ISR (the `data2sendFlag` is set and the data has been entered into the `data2send` variable, the data will be send once the `addressPolled` variable matches the address (`address2use`) of this decoder (with offset 1). The ISR also resets the `timeIdle` variable, to allow `checkPolling()` to detect the silence period preceding each new polling cycle. In normal operation this silence period is 7 ms.
-![ISR](Approach-Software-1.png)
+![ISR](Approach-Software-4m-A.png)
 
 The actual data transfer is performed by the Interrupt Service Routine (instead of the main loop) to ensure that:
  - data is send immediately after the feedback module gets its turn, and
@@ -18,4 +18,4 @@ The 4 ms idle period allows all feedback modules to synchronise (which means, in
 Since the decoder can (re)start in the middle of a polling cycle, `checkPolling()` also sets the `rsSignalIsOK` attribute once the start of a new RS-bus polling cycle is detected.
 
 After start-up, or after the master station resets, the decoder should first connect to the master by sending two 4 bit messages (the high and low order nibble) in two consecutive cycles. To signal that such connect is needed, the `feedbackRequested` flag is set by the `checkConnection()` method. Upon start-up, this flag is initialised to zero (no need to connect yet, since the beginning of a new polling cycle has not yet been detected). This flag is also set to zero if the RS-bus master resets (which the master indicates by sending a pulse of 88 ms, followed by silence period of roughly 562 ms). The `check_RS_bus()` method maintains a state machine to determine if we are in the start-up phase, if the start of a new polling cycle has been detected, if we already have send both connection nibbles and if we are connected.
-![checkPolling](Approach-Software-4ms-2.png)
+![checkPolling](Approach-Software-4ms-B.png)
