@@ -67,7 +67,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
 // to stop the rs_interrupt service routine, for symmetry reasons we have decided for an "attach"
 // and "detach".
 
-void initTcb(void) {
+void RSbusHardware::initTcb(void) {
   // Step 1: Instead of calling a specific timer directly, in init and detach we use a pointer to the
   // selected timer. However, since pointers add a level of indirection, the registers that we use
   // (EVCTRL and CCMP) will be directly accessed via #defines
@@ -111,7 +111,7 @@ void initTcb(void) {
 }
 
 
-void initEventSystem(uint8_t rxPin) {
+void RSbusHardware::initEventSystem(uint8_t rxPin) {
   noInterrupts();
   // Assign Event generator: a positive edge on the RS-bus input pin starts the timer
   Event& myEvent = Event::assign_generator_pin(rxPin);

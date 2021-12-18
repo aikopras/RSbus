@@ -75,7 +75,9 @@ class RSbusHardware {
       uint8_t strategy,                 // 0 = never, 1 = if just transmitted, 2 = always
       boolean dataWasSendFlag           // for strategy = 1
     );
- };
+    void initTcb(void);                 // For the TCB variants
+    void initEventSystem(uint8_t rxPin); // For the TCB variants
+};
 
 
 //************************************************************************************************
