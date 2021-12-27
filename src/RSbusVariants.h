@@ -31,7 +31,7 @@
 // For AtMegaX and DxCore processors a more efficient and reliable approach is to replace the
 // standard external pin interrupt (which is initialised using attachInterrupt()), with a TCB
 // interrupt that gets triggered via the Event System. This is therefore the default approach
-// for AtMegaX and DxCore processors that implement TCB2 / TCB3; which are processors with 40 pins
+// for AtMegaX and DxCore processors that implement TCB3; which are processors with 40 pins
 // or more. Examples are the 4809 and AVR128DA48.
 // Compared to RSBUS_USES_SW, this approach has the following advantages:
 // - TCB interrupts triggered via the Event System are faster than external pin interrupts
@@ -39,8 +39,8 @@
 //   improve reliability
 // - Noise cancelation is possible if a TCB is configured as Event user. Short spikes on the
 //   RS-Bus RX pin will than be filtered, and reliability will again be improved.
-// TCB0 may already be in use by the AP-DCC-Lib, TCB1 by the servo lib and TCB2 (DxCore) or TCB3 (MegaCoreX) by millis().
-// Therefore TCB2 (MegaCoreX) or TCB3 (DxCore) was selected as default.
+// TCB0 may already be in use by the AP-DCC-Lib, TCB1 by the servo lib and TCB2 by millis().
+// Therefore TCB3 was selected as default.
 //
 // RSBUS_USES_RTC (V2)
 // ===================
@@ -92,22 +92,26 @@
 
   // For DxCore processors with 40 pins or higher, the default is TCB3.
   // For MegaCoreX processors with 40 pins or higher, the default is TCB2.
+  // For MegaCoreX processors with 28 or 32 pins, the default is RTC.
   // TCB0 is used by the AP_DCC_Lib
   // TCB1 by the servo lib
   // On DxCore, the default for millis() is TCB2 (but can easily be changed)
-  // On MegaCoreX, millis() uses TCB3
+  // On MegaCoreX with 4 timers, millis() uses TCB3 => we use TCB2
+  // On MegaCoreX with 3 timers, millis() uses TCB2 => we use RTC
 
   #if defined(__AVR_DA__) || defined(__AVR_DB__)
     #if defined(TCB3_CNT)
       #define RSBUS_USES_SW_TCB3
     #endif
   #elif defined(MEGACOREX)
-    #if defined(TCB2_CNT)
+    #if defined(TCB3_CNT)
       #define RSBUS_USES_SW_TCB2
+    # else
+      #define RSBUS_USES_RTC
     #endif
   #endif
 
-  #if !defined(RSBUS_USES_SW_TCB2) && !defined(RSBUS_USES_SW_TCB3)
+  #if !defined(RSBUS_USES_SW_TCB2) && !defined(RSBUS_USES_SW_TCB3) && !defined(RSBUS_USES_RTC)
     #define RSBUS_USES_SW
   #endif
 #endif
