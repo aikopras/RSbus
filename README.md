@@ -1,4 +1,4 @@
-# RSbus (Version 2.2) #
+# RSbus (Version 2.3) #
 
 This Arduino library can be used to send feedback information from a decoder to the master station via the (LENZ) RS-bus. The RS-bus is the standard feedback bus used for Lenz products, and supported by several other vendors. As opposed to some other feedback systems, the RS-Bus implements a current loop (instead of voltage levels) for signalling, making the transmission less susceptible to noise and interference. RS-Bus packets also include a parity bit to provide some form of error detection, and the command station notifies the feedback decoders if it has detected such parity error. For more information on the RS-bus see the [der-moba website](http://www.der-moba.de/index.php/RS-Rückmeldebus) (in German) and [https://sites.google.com/site/dcctrains/rs-bus-feed](https://sites.google.com/site/dcctrains/rs-bus-feed). To understand the design decisions behind, and implementation of this library, see the file [Basic operation](extras/BasicOperation.md) for further details.
 
