@@ -11,6 +11,7 @@ Two Arduino pins are needed for this library, as well as some software:
 - A receive pin `rxPin`: needed to receive RS-bus polling pulses from the command station
 - A transmit pin (and USART): needed to send RS-bus messages to the command station
 - The timer associated with the Arduino millis() function
+- In case of a AtMega 2560 processor, Timer 5 is used to update the address being polled. 
 - Optional (depends on micro-controller and decoding approach, see below): Real Time Clock or one of the TCB timers. Installation of a MightyCore, MegaCore, MegaCoreX or DxCore board may be necessary (see for the URL the references below).
 
 
@@ -33,7 +34,7 @@ Version 2 (V2) of the RS-bus library supports different RS-bus routines for diff
 To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusVariants.h).
 
 - **The default approach for traditional AtMega processors (V2):**
-  The default approach for traditional AtMega processors (Uno, Nano, Mega, ...) is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
+  The default approach for traditional AtMega processors (Uno, Nano, Mega, ...) is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. To offload the CPU and make operation more reliable, in case of an AtMega 2560 processor Timer 5 is used to reset the RS-Bus address being polled. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
 
 - **The default approach for new AtMega processors (V2):**
   The default approach for new AtMega processors with 40 pins or more is also a software-based approach. Examples of such new AtMega processors are the 4809 (which is used on the Nano Every) and the AVR128DA48. The boards needed for these newer processors are  MegaCoreX and DxCore. Also in this approach an interrupt is raised after each RS-bus transition. However, this approach is more efficient and reliable, since the standard external pin interrupt (which is initialised using attachInterrupt()) is replaced by a TCB
@@ -60,7 +61,7 @@ The attach() functions checks two additional parameters: `interruptModeRising` a
 Should be called before of a (soft)reset of the decoder, to stop the ISR.
 
 - #### void checkPolling(void) ####
-Should be called as often as possible from the program's main loop. The RS-bus master sequentially polls each decoder. After all decoders have been polled, a new polling cycle will start. checkPolling() keeps the polling administration up-to-date.
+Should be called as often as possible from the program's main loop. The RS-bus master sequentially polls each decoder. After all decoders have been polled, a new polling cycle will start. checkPolling() keeps the polling administration up-to-date. Note: on AtMega 2560 processors checkPolling() is replaced by a Timer 5 interrupt and therefore doesn't need to be called anymore.
 
 - #### bool rsSignalIsOK ####
 A flag maintained by checkPolling() and used by objects from the RSbusConnection class to determine if a valid polling cycle has been detected and the master is ready to receive feedback data. In case of RS-bus errors, checkPolling() can force a reconnection to the master and thus the retransmission of feedback data, depending on the settings of `parityErrorHandling` and `pulseCountErrorHandling`.
