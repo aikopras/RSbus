@@ -52,31 +52,37 @@ enum Nibble_t  { HighBits, LowBits };
 //************************************************************************************************
 class RSbusHardware {
   public:
-    RSbusHardware();                    // The constructor for this class
+    RSbusHardware();                          // The constructor for this class
   
-    bool rsSignalIsOK;                  // Flag to indicate if the polling cyclus is error-free 
-    bool interruptModeRising;           // The interrupt triggers at the RISING edge (default: true)
-    bool swapUsartPin;                  // Enables the use of alternative USART pins (default: false)
-    uint8_t parityErrors;               // Number of parity errors detected
-    uint8_t pulseCountErrors;           // Number of pulse count errors detected
-    uint8_t parityErrorHandling;        // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
-    uint8_t pulseCountErrorHandling;    // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
+    bool rsSignalIsOK;                        // Flag to indicate if the polling cyclus is error-free
+    bool interruptModeRising;                 // The interrupt triggers at the RISING edge (default: true)
+    bool swapUsartPin;                        // Enables the use of alternative USART pins (default: false)
+    volatile uint8_t parityErrors;            // Number of parity errors detected
+    volatile uint8_t pulseCountErrors;        // Number of pulse count errors detected
+    volatile uint8_t parityErrorHandling;     // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
+    volatile uint8_t pulseCountErrorHandling; // 0..2. 0: no reaction, 1: only if just transmitted, 2: always
   
-    void attach(                        // Initialises the RS-bus ISR
-      uint8_t usartNumber,              // usart for sending (0..4)
-      uint8_t rxPin);                   // pin used for receiving; in the default case an INT pin
+    void attach(                              // Initialises the RS-bus ISR
+      uint8_t usartNumber,                    // usart for sending (0..4)
+      uint8_t rxPin);                         // pin used for receiving; in the default case an INT pin
    
-    void detach(void);                  // stops the RS-bus ISR
-    void checkPolling(void);            // Checks the polling logic of the RS-bus receiver.
+    void detach(void);                        // stops the RS-bus ISR
+    void checkPolling(void);                  // Checks every 2ms the polling logic of the RS-bus receiver.
+  
+    // There is no need to call the following, since it is already called by checkPolling or a timer
+    // However, it needs to be accessable globally to allow access by the timer ISR.
+    void updateAddressPolled(void);           // Called by checkPolling or a timer every 2ms.
   
   private:
-    int rxPinUsed;                      // local copy of pin used for sending, using the USART
-    void triggerRetransmission(         // May set rsSignalIsOK to false, which triggers retransmission
-      uint8_t strategy,                 // 0 = never, 1 = if just transmitted, 2 = always
-      boolean dataWasSendFlag           // for strategy = 1
+    int rxPinUsed;                            // local copy of pin used for sending, using the USART
+    void triggerRetransmission(               // May set rsSignalIsOK to false, which triggers retransmission
+      uint8_t strategy,                       // 0 = never, 1 = if just transmitted, 2 = always
+      boolean dataWasSendFlag                 // for strategy = 1
     );
-    void initTcb(void);                 // For the TCB variants
-    void initEventSystem(uint8_t rxPin); // For the TCB variants
+    void initTcb(void);                       // For the TCB variants
+    void initEventSystem(uint8_t rxPin);      // For the TCB variants
+    void init_timer5(void);                   // In case we have an ATMega 2560 processor
+    void stop_timer5(void);                   // In case we have an ATMega 2560 processor
 };
 
 

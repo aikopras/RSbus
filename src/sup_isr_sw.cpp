@@ -40,6 +40,7 @@
 // Used hardware and software:
 // - INTx: used to receive RS-bus information from the command station
 // - TXD/TXDx: used to send RS-bus information to the command station (USART)
+// - Timer5: If we have a 2560 processor
 //
 //******************************************************************************************************
 #include <Arduino.h>
@@ -50,6 +51,10 @@
 // This code is the default: it is only used if we didn't specify in RSbus.h any other directive
 #if defined(RSBUS_USES_SW)
 
+// In case of a processor with many timers (like the 2560), use Timer 5 to make checkPolling more robust
+#if defined(__AVR_ATmega2560__)
+  #define USE_TIMER_5
+#endif
 //******************************************************************************************************
 // The following objects are instantiated elsewhere, but are used here
 extern RSbusHardware rsbusHardware;  // instantiated in "RS-bus.cpp"
@@ -106,10 +111,13 @@ void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
   // Step 2: attach the interrupt to the RSBUS_RX pin.
   if (interruptModeRising) attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, RISING);
   else attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, FALLING);
+  // Step 3: In case we use a 2560 processor, Timer5 is used to update addressPolled
+  init_timer5();
 }
 
 void RSbusHardware::detach(void) {
   detachInterrupt(digitalPinToInterrupt(rxPinUsed));
+  stop_timer5();
 }
 
 
@@ -149,56 +157,63 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // - check 6: same as check 5 
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
+  #if !defined(USE_TIMER_5)                            // Skip, since Timer 5 takes over
   unsigned long currentTime = millis();                // will not chance during sub routine
   if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
-    rsISR.tLastCheck = currentTime;   
-    uint16_t currentCnt = rsISR.addressPolled;         // will not chance during sub routine
-    if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period
-      rsISR.timeIdle++;                                // Counts which 2ms check we are in
-      switch (rsISR.timeIdle) {                        // See figures in documentation
-      case 1:                                          // addressPolled differs from previous count
-      case 2:                                          // May also occur if UART send byte 
-      case 4:                                          // Same as case 3, nothing new
-      case 6:                                          // Same as case 5, nothing new
-      break;
-      case 3:                                          // Third check => SILENCE!
-        // Set flags for possible retransmission
-        rsISR.flagPulseCount = rsISR.dataWasSendFlag;  // ISR may set the dataWasSendFlag
-        rsISR.flagParity     = rsISR.dataWasSendFlag;  // and flags may trigger retransmission
-        rsISR.dataWasSendFlag = false;                 // but only is previous cycle had errors
-        if (rsISR.addressPolled == 130) {
-          // Step 2A: signal is OK, so tell ISR if data is waiting to be transmitted
-          rsSignalIsOK = true;
-          if (rsISR.data2sendFlag) rsISR.data4IsrFlag = true;
+    rsISR.tLastCheck = currentTime;
+      updateAddressPolled();
+  }
+  #endif
+}
+
+
+void RSbusHardware::updateAddressPolled(void) {
+  uint16_t currentCnt = rsISR.addressPolled;         // will not chance during sub routine
+  if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period
+    rsISR.timeIdle++;                                // Counts which 2ms check we are in
+    switch (rsISR.timeIdle) {                        // See figures in documentation
+    case 1:                                          // addressPolled differs from previous count
+    case 2:                                          // May also occur if UART send byte
+    case 4:                                          // Same as case 3, nothing new
+    case 6:                                          // Same as case 5, nothing new
+    break;
+    case 3:                                          // Third check => SILENCE!
+      // Set flags for possible retransmission
+      rsISR.flagPulseCount = rsISR.dataWasSendFlag;  // ISR may set the dataWasSendFlag
+      rsISR.flagParity     = rsISR.dataWasSendFlag;  // and flags may trigger retransmission
+      rsISR.dataWasSendFlag = false;                 // but only is previous cycle had errors
+      if (rsISR.addressPolled == 130) {
+        // Step 2A: signal is OK, so tell ISR if data is waiting to be transmitted
+        rsSignalIsOK = true;
+        if (rsISR.data2sendFlag) rsISR.data4IsrFlag = true;
+      }
+      else {                                         // pulse count problem
+        if (rsSignalIsOK) {                          // Do nothing during initialisation
+          pulseCountErrors ++;
+          triggerRetransmission(pulseCountErrorHandling, rsISR.flagPulseCount);
         }
-        else {                                         // pulse count problem
-          if (rsSignalIsOK) {                          // Do nothing during initialisation
-            pulseCountErrors ++;
-            triggerRetransmission(pulseCountErrorHandling, rsISR.flagPulseCount);
-          }
-        }
-        rsISR.addressPolled = 0;                       // Reset 
-        rsISR.lastPulseCnt = 0;                        // Reset
-      break;
-      case 5:                                          // 8ms of silence => Parity error
-        if (rsSignalIsOK) {                            // Only act if everything was OK before
-          parityErrors++;                              // Keep track of number of parity errors
-          triggerRetransmission(parityErrorHandling, rsISR.flagParity);
-        }
-      break;
-      case 7:                                          // 12ms of silence: RS-bus signal loss
-        if (rsSignalIsOK) parityErrors--;              // Wasn't a parity error
-        rsSignalIsOK = false;                          // Will trigger a reconnect to the master
-        rsISR.data4IsrFlag = false;                    // Cancel possible data waiting for ISR
-      break;
-      default:                                         // Silence >= 14ms
-      break;
-      };
-    }
-    else {                                             // Not a silence period
-      rsISR.lastPulseCnt = currentCnt;                 // Store current addressPolled
-      rsISR.timeIdle = 1;                              // Reset silence (idle) period counter
-    }
+      }
+      rsISR.addressPolled = 0;                       // Reset
+      rsISR.lastPulseCnt = 0;                        // Reset
+    break;
+    case 5:                                          // 8ms of silence => Parity error
+      if (rsSignalIsOK) {                            // Only act if everything was OK before
+        parityErrors++;                              // Keep track of number of parity errors
+        triggerRetransmission(parityErrorHandling, rsISR.flagParity);
+      }
+    break;
+    case 7:                                          // 12ms of silence: RS-bus signal loss
+      if (rsSignalIsOK) parityErrors--;              // Wasn't a parity error
+      rsSignalIsOK = false;                          // Will trigger a reconnect to the master
+      rsISR.data4IsrFlag = false;                    // Cancel possible data waiting for ISR
+    break;
+    default:                                         // Silence >= 14ms
+    break;
+    };
+  }
+  else {                                             // Not a silence period
+    rsISR.lastPulseCnt = currentCnt;                 // Store current addressPolled
+    rsISR.timeIdle = 1;                              // Reset silence (idle) period counter
   }
 }
 
@@ -221,4 +236,57 @@ void rs_interrupt(void) {
   rsISR.addressPolled ++;                  // Address of slave that gets his turn next
 }
 
-#endif // #ifndef (RSBUS_USES_RTC || RSBUS_USES_SW_4MS)
+
+//******************************************************************************************************
+// Timer 5 Interrupt Service routines to call updateAddressPolled() every 2ms
+//******************************************************************************************************
+// In "normal" sketches checkPolling() is called as frequent as possible from the main loop.
+// checkPolling() in turn calls updateAddressPolled(), which resets the addressPolled variable.
+// It is important that updateAddressPolled() is called at least every 2ms.
+// Unfortunately some libraries, like the LCD library, are quite slow. For example, writing to the
+// LCD display can easily costs many ms.
+// As a result, updateAddressPolled() may miss the right moment to reset the polled address,
+// which in turn will lead to RS-Bus pulse count errors.
+// Fortunately the Mega2560 processor has multiple unused 16 bit timers.
+// By using a timer ISR, we can ensure that updateAddressPolled() will be called as often as needed.
+//
+// For simplicity We will use Timer 5, and use hard-coded values presuming the CPU runs at 16Mhz.
+// Calculation:
+// - 16Mhz and a prescaler of 8 results in an interrupt every 0,5 microseconds
+// - For 2ms we therefore need 4000 ticks
+// - TCNT should therefore be preloaded with 65535 - 4000 = 61535
+#define START_VALUE      61535
+#define PRESCALER_BITS    0x02  // Means the prescaler becomes 8
+
+
+void RSbusHardware::init_timer5() {
+  #if defined(USE_TIMER_5)
+    noInterrupts();             // disable all interrupts
+    TCCR5A = 0x00;              // Should remain 0 for overflow mode
+    TCCR5B = 0x00;              // Should hold the prescaler. 0 = stop (needed to setup)
+    TCNT5 = START_VALUE;        // Preload the timer
+    TIMSK5 = 0x01;              // Timer5 INT Reg: Timer5 Overflow Interrupt Enable
+    TCCR5B = PRESCALER_BITS;    // Start the timer by setting the Prescaler
+    interrupts();               // enable all interrupts
+  #endif
+}
+
+
+void RSbusHardware::stop_timer5() {
+#if defined(USE_TIMER_5)
+  noInterrupts();             // disable all interrupts
+  TCCR5B = 0x00;              // 0 = stop
+  interrupts();               // enable all interrupts
+#endif
+}
+
+
+#if defined(USE_TIMER_5)
+ISR(TIMER5_OVF_vect) {
+  TCNT5 = START_VALUE;        // Reload the timer
+  rsbusHardware.updateAddressPolled();
+}
+#endif
+
+//******************************************************************************************************
+#endif // #if defined(RSBUS_USES_SW)
