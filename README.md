@@ -11,7 +11,7 @@ Two Arduino pins are needed for this library, as well as some software:
 - A receive pin `rxPin`: needed to receive RS-bus polling pulses from the command station
 - A transmit pin (and USART): needed to send RS-bus messages to the command station
 - The timer associated with the Arduino millis() function
-- In case of a AtMega 2560 processor, Timer 5 is used to update the address being polled. 
+- In case of a AtMega 2560 processor, Timer 5 is used to update the address being polled.
 - Optional (depends on micro-controller and decoding approach, see below): Real Time Clock or one of the TCB timers. Installation of a MightyCore, MegaCore, MegaCoreX or DxCore board may be necessary (see for the URL the references below).
 
 
@@ -33,19 +33,21 @@ Below an overview of (some) processors that support multiple USARTs.
 Version 2 (V2) of the RS-bus library supports different RS-bus routines for different ATMega controllers and software.
 To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusVariants.h).
 
-- **The default approach for traditional AtMega processors (V2):**
-  The default approach for traditional AtMega processors (Uno, Nano, Mega, ...) is the software-based approach, where an interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. To offload the CPU and make operation more reliable, in case of an AtMega 2560 processor Timer 5 is used to reset the RS-Bus address being polled. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
+- **RSBUS_USES_SW: the default approach for traditional AtMega 328 processors (V2):**
+  The default approach for traditional AtMega processors with a limited number of timers (Uno, Nano, ...) is the software-based approach, where a pin interrupt is raised after each RS-bus transition. The advantage of this approach is that it works with all controllers, but the disadvantage is that it puts more load on the CPU and may therefore interfere with other timing sensitive code. See [Basic operation](extras/BasicOperation.md) for details. ***=> works on all ATMega micro-processors.***
+
+- **RSBUS_USES_SW_T3: the default approach for AtMega 2560 processors (V2.4):**
+  The default approach for AtMega processors with a higher number of timers (Mega, ...) is the software-based approach, where a pin interrupt is raised after each RS-bus transition, combined with an extra timer that resets the RS-Bus address being polled. Using this extra timer not only offloads the CPU, but it also makes operation more reliable in cases where other software (such as the LCD library) blocks the CPU for longer periods of time (longer is more than 2ms).   
+  By default Timer 3 is used, but if this timer is used in other parts of the sketch Timer 4 or Timer 5 may be selected as alternative. ***=> works on ATMega 2560 micro-processors.***
 
 - **The default approach for new AtMega processors (V2):**
-  The default approach for new AtMega processors with 40 pins or more is also a software-based approach. Examples of such new AtMega processors are the 4809 (which is used on the Nano Every) and the AVR128DA48. The boards needed for these newer processors are  MegaCoreX and DxCore. Also in this approach an interrupt is raised after each RS-bus transition. However, this approach is more efficient and reliable, since the standard external pin interrupt (which is initialised using attachInterrupt()) is replaced by a TCB
- interrupt that gets triggered via the Event System. Such interrupts are considerably faster than the external pin interrupts used in the previous approach. In addition, the TCB timer can efficiently measure the precise duration of each RS-bus pulse, and thereby
-improve reliability. Finally noise cancelation is possible if the TCB is configured as Event user. Short spikes on the RS-Bus RX pin will than be filtered, and reliability will again be improved. Depending on the board, TCB2 is used as default (MegaCoreX) or TCB3 (DxCore).
+  The default approach for new AtMega processors with 40 pins or more is also a software-based approach. Examples of such new AtMega processors are the 4809 (which is used on the Nano Every) and the AVR128DA48. The boards needed for these newer processors are  MegaCoreX and DxCore. Also in this approach an interrupt is raised after each RS-bus transition. However, this approach is more efficient and reliable, since the standard external pin interrupt (which is initialised using attachInterrupt()) is replaced by a TCB interrupt that gets triggered via the Event System. Such interrupts are considerably faster than the external pin interrupts used in the previous approach. In addition, the TCB timer can efficiently measure the precise duration of each RS-bus pulse, and thereby improve reliability. Finally noise cancelation is possible if the TCB is configured as Event user. Short spikes on the RS-Bus RX pin will than be filtered, and reliability will again be improved. Depending on the board, TCB2 is used as default (MegaCoreX) or TCB3 (DxCore).
 
 - **RSBUS_USES_RTC (V2):**
   An alternative approach is to use the Real Time Clock (RTC) of the modern ATMegaX and DxCore processors (such as 4808, 4809, 128DA48 etc). This code puts less load on the CPU but has as disadvantage that the RS-Bus input signal *MUST* be connected to pin PA0 (ExtClk). This approach requires installation of the MegaCoreX or DxCore board software. ***=> recommended for newer processors on MegaCoreX / DxCore boards. Requires pin PA0!***
 
 - **RSBUS_USES_HW_TCBx (V2):**
-  A similar approach is to use one of the five TCBs of a DxCore processor as event counter. For that purpose the TCB should be used in the "Input capture on Event" mode. That mode exists on novel DxCore (such as the 128DA48) processors, but not on MegaCoreX (such as 4808, 4809) or earlier processors. Like the RTC approach, this approach puts limited load on the CPU,  but as opposed to the RTC approach we have (more) freedom in choosing the RS-bus input pin. This approach requires installation of the DxCore board software. ***Supported only on DxCore boards. Useful if pin PA0 is not available.***
+  A similar approach is to use one of the five TCBs of a DxCore processor as event counter. For that purpose the TCB should be used in the "Input capture on Event" mode. That mode exists on novel DxCore (such as the 128DA48) processors, but not on MegaCoreX (such as 4808, 4809) or earlier processors. Like the RTC approach, this approach puts limited load on the CPU,  but as opposed to the RTC approach we have (more) freedom in choosing the RS-bus input pin. This approach requires installation of the DxCore board software. ***=> Supported only on DxCore boards. Useful if pin PA0 is not available.***
 
 - **RSBUS_USES_SW_4MS (V1):**
   This was the default version in the previous release (V1) of the RS-bus library. Instead of checking every 2ms for a period of silence, we check every 4ms. This may be slightly more efficient, but doesn't allow the detection of parity errors. ***=> included for compatibility reasons.***

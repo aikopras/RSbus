@@ -71,7 +71,7 @@ class RSbusHardware {
   
     // There is no need to call the following, since it is already called by checkPolling or a timer
     // However, it needs to be accessable globally to allow access by the timer ISR.
-    void updateAddressPolled(void);           // Called by checkPolling or a timer every 2ms.
+    void resetAddressPolled(void);            // Called by checkPolling or a timer every 2ms.
   
   private:
     int rxPinUsed;                            // local copy of pin used for sending, using the USART
@@ -81,8 +81,8 @@ class RSbusHardware {
     );
     void initTcb(void);                       // For the TCB variants
     void initEventSystem(uint8_t rxPin);      // For the TCB variants
-    void init_timer5(void);                   // In case we have an ATMega 2560 processor
-    void stop_timer5(void);                   // In case we have an ATMega 2560 processor
+    void init_timerx(void);                   // In case we have an ATMega 2560 processor
+    void stop_timerx(void);                   // In case we have an ATMega 2560 processor
 };
 
 

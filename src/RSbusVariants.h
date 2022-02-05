@@ -15,16 +15,27 @@
 //
 // history:   2021-10-16 ap V1.0 Initial version
 //            2021-12-13 ap V1.1 Restructured, and selects TCB3 as default when possible
+//            2022-02-05 ap V1.2 For ATMega 2560 selects Timer 3 as default (4&5 are alternatives)
 //
 //
 // For different ATmega controllers different RS-bus routines exist
 //
 // RSBUS_USES_SW (V2)
 // ==================
-// The default approach is the software-based approach, where an interrupt is raised after each
-// RS-bus transition. The advantage of this approach is that it works with all controllers, but
-// the disadvantage is that it puts more load on the CPU and may therefore interfere with other
-// timing sensitive code.
+// The default approach is the software-based approach, where a pin interrupt is raised after
+// each RS-bus transition. The advantage of this approach is that it works with all controllers,
+// but, the disadvantage is that it puts more load on the CPU and may therefore interfere with other
+// timing sensitive code. In addition, the main loop MUST call checkPolling() at least every 2ms,
+// to reset the address that is being polled. If other code, like for example the LCD-Libraries,
+// prevent that checkPolling() is called every 2ms, pulse counte errors may be the result.
+//
+// RSBUS_USES_SW_Tx (V2.4)
+// =======================
+// Tracditional ATMega processors with four 16-bit Timers will use one of the extra timers
+// to reset the RS-Bus address that is being polled. In this way pulse count errors are
+// avoided, even if the RS-Bus library is used in combination with other code that block the CPU
+// for long (>2ms) periods of time. Timer 3 is used as default.
+// Possible processors include the ATMega 2560.
 //
 // RSBUS_USES_SW_TCBx (V2)
 // =======================
@@ -64,9 +75,14 @@
 //
 //************************************************************************************************
 // To use alternative RS-bus code, uncomment ONE of the following lines. 
-// #define RSBUS_USES_SW            // Default for traditional Arduino's
+// #define RSBUS_USES_SW            // Pin ISR for pulse count, default for traditional Arduino's
 // #define RSBUS_USES_RTC           // DxCore and MegaCoreX
 // #define RSBUS_USES_SW_4MS        // Compatable with previous versions of the RS-bus library
+
+// ATMega 640, 1280, 1281, 2560, 2561:
+// #define RSBUS_USES_SW_T3         // Pin ISR for pulse count, Timer instead of checkPolling()
+// #define RSBUS_USES_SW_T4         // Pin ISR for pulse count, Timer instead of checkPolling()
+// #define RSBUS_USES_SW_T5         // Pin ISR for pulse count, Timer instead of checkPolling()
 
 // DxCore and MegaCoreX:
 // #define RSBUS_USES_SW_TCB0       // The default version AP_DCC_Library also uses TCB0
@@ -85,6 +101,7 @@
 
 // If none of the above alternatives was selected, we use a default version
 #if !defined(RSBUS_USES_SW)      && !defined(RSBUS_USES_SW_4MS)  && !defined(RSBUS_USES_RTC) && \
+    !defined(RSBUS_USES_SW_T3)   && !defined(RSBUS_USES_SW_T4)   && !defined(RSBUS_USES_SW_T5) && \
     !defined(RSBUS_USES_SW_TCB0) && !defined(RSBUS_USES_SW_TCB1) && !defined(RSBUS_USES_SW_TCB2) && \
     !defined(RSBUS_USES_SW_TCB3) && !defined(RSBUS_USES_SW_TCB4) && \
     !defined(RSBUS_USES_HW_TCB0) && !defined(RSBUS_USES_HW_TCB1) && !defined(RSBUS_USES_HW_TCB2) && \
@@ -93,11 +110,16 @@
   // For DxCore processors with 40 pins or higher, the default is TCB3.
   // For MegaCoreX processors with 40 pins or higher, the default is TCB2.
   // For MegaCoreX processors with 28 or 32 pins, the default is RTC.
+  // For ATMega 640, 1280, 1281, 2560 and 2561 the default is a pin interrupt to increment the address
+  // being polled (thus a pin interrupt to count the RS-Bus address pulses) and Timer 3
+  // (instead of CheckPolling()) to reset the address being polled
+  //
   // TCB0 is used by the AP_DCC_Lib
   // TCB1 by the servo lib
   // On DxCore, the default for millis() is TCB2 (but can easily be changed)
   // On MegaCoreX with 4 timers, millis() uses TCB3 => we use TCB2
   // On MegaCoreX with 3 timers, millis() uses TCB2 => we use RTC
+  // On the ATMega 2560, TCB5 is used by the LocoNet library
 
   #if defined(__AVR_DA__) || defined(__AVR_DB__)
     #if defined(TCB3_CNT)
@@ -106,14 +128,21 @@
   #elif defined(MEGACOREX)
     #if defined(TCB3_CNT)
       #define RSBUS_USES_SW_TCB2
-    # else
+    #else
       #define RSBUS_USES_RTC
     #endif
   #endif
 
-  #if !defined(RSBUS_USES_SW_TCB2) && !defined(RSBUS_USES_SW_TCB3) && !defined(RSBUS_USES_RTC)
+  #if defined(__AVR_ATmega640__)  || defined(__AVR_ATmega1280__) || defined(__AVR_ATmega1281__) || \
+      defined(__AVR_ATmega2560__) || defined(__AVR_ATmega2561__)
+      #define RSBUS_USES_SW_T3
+  #endif
+
+  #if !defined(RSBUS_USES_SW_TCB2) && !defined(RSBUS_USES_SW_TCB3) && !defined(RSBUS_USES_RTC) && \
+      !defined(RSBUS_USES_SW_T3)
     #define RSBUS_USES_SW
   #endif
+
 #endif
 
 
@@ -144,7 +173,22 @@
   #ifndef TCB4_CNT
   #error "The selected RS-bus code does not run on this hardware"
   #endif
+#elif defined(RSBUS_USES_SW_T3)
+  #ifndef TCNT3
+  #error "The selected RS-bus code does not run on this hardware"
+  #endif
+#elif defined(RSBUS_USES_SW_T4)
+  #ifndef TCNT4
+  #error "The selected RS-bus code does not run on this hardware"
+  #endif
+#elif defined(RSBUS_USES_SW_T5)
+  #ifndef TCNT5
+  #error "The selected RS-bus code does not run on this hardware"
+  #endif
 #endif
 
 
  
+// #define RSBUS_USES_SW_T3         // Pin ISR for pulse count, Timer instead of checkPolling()
+// #define RSBUS_USES_SW_T4         // Pin ISR for pulse count, Timer instead of checkPolling()
+// #define RSBUS_USES_SW_T5         // Pin ISR for pulse count, Timer instead of checkPolling()
