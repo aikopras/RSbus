@@ -31,11 +31,12 @@
 //
 // RSBUS_USES_SW_Tx (V2.4)
 // =======================
-// Tracditional ATMega processors with four 16-bit Timers will use one of the extra timers
-// to reset the RS-Bus address that is being polled. In this way pulse count errors are
-// avoided, even if the RS-Bus library is used in combination with other code that block the CPU
-// for long (>2ms) periods of time. Timer 3 is used as default.
-// Possible processors include the ATMega 2560.
+// Tracditional ATMega processors with four 16-bit Timers, such as the ATMega 2560. will use one
+// of the extra timers to reset the RS-Bus address that is being polled. In this way pulse count
+// errors are avoided, even if the RS-Bus library is used in combination with other code that
+// block sthe CPU for long (>2ms) periods of time. For the ATMega 2560 Timer 3 is used as default.
+// However, also other ATMega processors that support at least one 16-bit Timer can select this
+// variant.
 //
 // RSBUS_USES_SW_TCBx (V2)
 // =======================
@@ -79,7 +80,8 @@
 // #define RSBUS_USES_RTC           // DxCore and MegaCoreX
 // #define RSBUS_USES_SW_4MS        // Compatable with previous versions of the RS-bus library
 
-// ATMega 640, 1280, 1281, 2560, 2561:
+// ATMega 640, 1280, 1281, 2560, 2561 (but also 328, 16, ...):
+// #define RSBUS_USES_SW_T1         // Pin ISR for pulse count, Timer instead of checkPolling()
 // #define RSBUS_USES_SW_T3         // Pin ISR for pulse count, Timer instead of checkPolling()
 // #define RSBUS_USES_SW_T4         // Pin ISR for pulse count, Timer instead of checkPolling()
 // #define RSBUS_USES_SW_T5         // Pin ISR for pulse count, Timer instead of checkPolling()

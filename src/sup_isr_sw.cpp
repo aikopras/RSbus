@@ -7,6 +7,7 @@
 // history:   2019-01-30 ap V0.1 Initial version
 //            2021-08-18 ap V0.2 millis() replaced by flag
 //            2021-10-12 ap V1.0 Check every 2ms and ability to detect parity errors
+//            2022-07-26 ap V1.1 Added support for Timer 1. Added F_CPU to prescaler
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -40,7 +41,7 @@
 // Used hardware and software:
 // - INTx: used to receive RS-bus information from the command station
 // - TXD/TXDx: used to send RS-bus information to the command station (USART)
-// - Timer3 (4 or 5): If we have a 2560 processor
+// - Timer3 (1,,3, 4 or 5): If we have a 2560 processor
 //
 //******************************************************************************************************
 #include <Arduino.h>
@@ -49,7 +50,7 @@
 #include "sup_usart.h"
 
 // This code is used as the default. UNO, NANO and Mega 2560 will use this code.
-#if defined(RSBUS_USES_SW) || defined(RSBUS_USES_SW_T3) || defined(RSBUS_USES_SW_T4) || defined(RSBUS_USES_SW_T5)
+#if defined(RSBUS_USES_SW) || defined(RSBUS_USES_SW_T1)||  defined(RSBUS_USES_SW_T3) || defined(RSBUS_USES_SW_T4) || defined(RSBUS_USES_SW_T5)
 
 
 //******************************************************************************************************
@@ -154,7 +155,7 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // - check 6: same as check 5 
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
-  #if !defined(RSBUS_USES_SW_T3) && !defined(RSBUS_USES_SW_T4) && !defined(RSBUS_USES_SW_T5)
+  #if !defined(RSBUS_USES_SW_T1) && !defined(RSBUS_USES_SW_T3) && !defined(RSBUS_USES_SW_T4) && !defined(RSBUS_USES_SW_T5)
   // Skip the following code, since Timer 3 (4 or 5) takes over
   unsigned long currentTime = millis();                // will not chance during sub routine
   if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
@@ -245,21 +246,31 @@ void rs_interrupt(void) {
 // LCD display can easily costs many ms.
 // As a result, resetAddressPolled() may miss the right moment to reset the polled address,
 // which in turn will lead to RS-Bus pulse count errors.
-// Fortunately the Mega2560 (and similar) processor has multiple unused 16 bit timers.
+// Fortunately the Mega2560 (and similar) processor has multiple (unused) 16 bit timers.
 // By using a timer ISR, we can ensure that resetAddressPolled() will be called as often as needed.
-//
-// For simplicity we will use hard-coded values presuming the CPU runs at 16Mhz.
-// Calculation:
+
+#define TIME_MS            2     // The timer should fire every 2 ms
+#define PRESCALER          8
+#define START_VALUE        65535 - (F_CPU / PRESCALER * TIME_MS / 1000L)
+#define PRESCALER_BITS     0x02  // Means the prescaler becomes 8
+// Example calculation:
 // - 16Mhz and a prescaler of 8 results in an interrupt every 0,5 microseconds
 // - For 2ms we therefore need 4000 ticks
-// - TCNT should therefore be preloaded with 65535 - 4000 = 61535
-#define START_VALUE      61535
-#define PRESCALER_BITS    0x02  // Means the prescaler becomes 8
-
+// - TCNT will therefore be preloaded with 65535 - 4000 = 61535
 
 void RSbusHardware::init_timerx() {
   noInterrupts();               // disable all interrupts
-  #if defined(RSBUS_USES_SW_T3)
+  #if defined(RSBUS_USES_SW_T1)
+    TCCR1A = 0x00;              // Should remain 0 for overflow mode
+    TCCR1B = 0x00;              // Should hold the prescaler. 0 = stop (needed to setup)
+    TCNT1 = START_VALUE;        // Preload the timer
+    #ifdef TIMSK                // ATmega 8535/16/32
+      TIMSK |= (1 << TOIE1);    // NOTE: TIMSK controls multiple timers. Set only this bit!
+   #else                        // The standard ATmega boards (328, 2560)
+      TIMSK1 = 0x01;            // Timer1 INT Reg: Timer1 Overflow Interrupt Enable
+    #endif
+    TCCR1B = PRESCALER_BITS;    // Start the timer by setting the Prescaler
+  #elif defined(RSBUS_USES_SW_T3)
     TCCR3A = 0x00;              // Should remain 0 for overflow mode
     TCCR3B = 0x00;              // Should hold the prescaler. 0 = stop (needed to setup)
     TCNT3 = START_VALUE;        // Preload the timer
@@ -284,7 +295,9 @@ void RSbusHardware::init_timerx() {
 
 void RSbusHardware::stop_timerx() {
   noInterrupts();               // disable all interrupts
-  #if defined(RSBUS_USES_SW_T3)
+  #if defined(RSBUS_USES_SW_T1)
+    TCCR1B = 0x00;              // 0 = stop
+  #elif defined(RSBUS_USES_SW_T3)
     TCCR3B = 0x00;              // 0 = stop
   #elif defined(RSBUS_USES_SW_T4)
     TCCR4B = 0x00;              // 0 = stop
@@ -295,7 +308,12 @@ void RSbusHardware::stop_timerx() {
 }
 
 
-#if defined(RSBUS_USES_SW_T3)
+#if defined(RSBUS_USES_SW_T1)
+ISR(TIMER1_OVF_vect) {
+  TCNT1 = START_VALUE;          // Reload the timer
+  rsbusHardware.resetAddressPolled();
+}
+#elif defined(RSBUS_USES_SW_T3)
 ISR(TIMER3_OVF_vect) {
   TCNT3 = START_VALUE;          // Reload the timer
   rsbusHardware.resetAddressPolled();
