@@ -16,7 +16,7 @@
 // history:   2021-10-16 ap V1.0 Initial version
 //            2021-12-13 ap V1.1 Restructured, and selects TCB3 as default when possible
 //            2022-02-05 ap V1.2 For ATMega 2560 selects Timer 3 as default (4&5 are alternatives)
-//
+//            2022-07-27 ap V1.3 Timer 1 is now possible as well
 //
 // For different ATmega controllers different RS-bus routines exist
 //

@@ -4,6 +4,7 @@
 // purpose:   Support file for the RS-bus library.
 // history:   2019-01-30 ap V0.1 Initial version
 //            2021-09-25 ap V1.0 Production version
+//            2022-07-27 ap V1.1 millis() replaced by micros()
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -32,7 +33,7 @@ class RSbusIsr {
     volatile bool flagParity;               // Will we retransmit after a parity error?
 
     volatile uint8_t timeIdle;              // How long is the command station idle (volatile: reset by 4ms ISR)
-    unsigned long tLastCheck;               // Time in msec
+    unsigned long tLastCheck;               // Time in microsec
     uint16_t lastPulseCnt;                  // Previous value of the silence counter
 
     // Specific for the software based ISRs (pulse count is performed in software within the ISR)

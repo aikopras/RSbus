@@ -6,6 +6,7 @@
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
 //            Uses the Real Time Counter (RTC) of MegaCoreX and DxCore processors.
 // history:   2021-10-10 ap V1.0 initial version
+//            2022-07-27 ap V1.1 millis() replaced by micros()
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -132,7 +133,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
   dataWasSendFlag = false;       // No, we didn't send anything yet
   flagParity = false;            // No, we don't need to retranmit after a parity error
   flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
-  tLastCheck = millis();         // Current time
+  tLastCheck = micros();         // Current time
 }
 
    
@@ -222,8 +223,8 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // - check 6: same as check 5 
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
-  unsigned long currentTime = millis();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
+  unsigned long currentTime = micros();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
     rsISR.tLastCheck = currentTime;   
     uint16_t currentCnt = RTC.CNT;                     // will not chance during sub routine
     if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period

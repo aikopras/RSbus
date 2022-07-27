@@ -1,4 +1,4 @@
-# RSbus (Version 2.4.5) #
+# RSbus (Version 2.4.6) #
 
 This Arduino library can be used to send feedback information from a decoder to the master station via the (LENZ) RS-bus. The RS-bus is the standard feedback bus used for Lenz products, and supported by several other vendors. As opposed to some other feedback systems, the RS-Bus implements a current loop (instead of voltage levels) for signalling, making the transmission less susceptible to noise and interference. RS-Bus packets also include a parity bit to provide some form of error detection, and the command station notifies the feedback decoders if it has detected such parity error. For more information on the RS-bus see the [der-moba website](http://www.der-moba.de/index.php/RS-Rückmeldebus) (in German) and [https://sites.google.com/site/dcctrains/rs-bus-feed](https://sites.google.com/site/dcctrains/rs-bus-feed). To understand the design decisions behind, and implementation of this library, see the file [Basic operation](extras/BasicOperation.md) for further details.
 
@@ -10,7 +10,7 @@ If no feedback module sends information, one complete polling cycle takes 33,1 m
 Two Arduino pins are needed for this library, as well as some software:
 - A receive pin `rxPin`: needed to receive RS-bus polling pulses from the command station
 - A transmit pin (and USART): needed to send RS-bus messages to the command station
-- The timer associated with the Arduino millis() function
+- The timer associated with the Arduino micros() function
 - In case of a AtMega 2560 processor, Timer 5 is used to update the address being polled.
 - Optional (depends on micro-controller and decoding approach, see below): Real Time Clock or one of the TCB timers. Installation of a MightyCore, MegaCore, MegaCoreX or DxCore board may be necessary (see for the URL the references below).
 

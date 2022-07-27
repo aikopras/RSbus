@@ -24,7 +24,7 @@
 // Two Arduino pins are needed for this library, as well as some software:
 // - A receive pin `rxPin`: needed to receive RS-bus polling pulses from the command station
 // - A USART transmit pin: needed to send RS-bus messages to the command station
-// - The timer associated with the Arduino millis() function
+// - The timer associated with the Arduino micros() function
 // - Optional (depends on micro-controller and variant): MightyCore, MegaCore, MegaCoreX or
 //   DxCore board. See https://github.com/MCUdude and [https://github.com/SpenceKonde.
 //

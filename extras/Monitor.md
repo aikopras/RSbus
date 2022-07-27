@@ -114,8 +114,8 @@ void setup() {
 
 
 void monitor() {
-  currentTime = millis();                              // Local copy: no changes during sub routine
-  if ((currentTime - tLastCheck) >= 1) {               // Check once every 1 ms
+  currentTime = micros();                              // Local copy: no changes during sub routine
+  if ((currentTime - tLastCheck) >= 1000) {            // Check once every 1 ms
     tLastCheck = currentTime;
     addressPolled = isrCounter;                        // will not chance during sub routine
     switch (pollState) {

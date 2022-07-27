@@ -4,8 +4,8 @@
 `CheckPolling()` is responsible to (re)initialise during the 7ms silence period the counter that determines which RS-bus address is currently polled. The loop within the main sketch should call `checkPolling()` as often as possible. To avoid excessive load of the processor, the first check within `checkPolling()` is whether 2ms have passed since its previous activity. For that purpose the `tLastCheck` parameter is maintained. Only every 2ms `checkPolling()` performs actions.
 ```
 void RSbusHardware::checkPolling(void) {
-  unsigned long currentTime = millis();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
+  unsigned long currentTime = micros();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
     rsISR.tLastCheck = currentTime;   
     ...
   }

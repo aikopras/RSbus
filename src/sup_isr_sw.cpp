@@ -8,6 +8,7 @@
 //            2021-08-18 ap V0.2 millis() replaced by flag
 //            2021-10-12 ap V1.0 Check every 2ms and ability to detect parity errors
 //            2022-07-26 ap V1.1 Added support for Timer 1. Added F_CPU to prescaler
+//            2022-07-27 ap V1.2 millis() replaced by micros()
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -72,7 +73,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
   dataWasSendFlag = false;       // No, we didn't send anything yet
   flagParity = false;            // No, we don't need to retranmit after a parity error
   flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
-  tLastCheck = millis();         // Current time
+  tLastCheck = micros();         // Current time
 }
 
 
@@ -157,8 +158,8 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 void RSbusHardware::checkPolling(void) {
   #if !defined(RSBUS_USES_SW_T1) && !defined(RSBUS_USES_SW_T3) && !defined(RSBUS_USES_SW_T4) && !defined(RSBUS_USES_SW_T5)
   // Skip the following code, since Timer 3 (4 or 5) takes over
-  unsigned long currentTime = millis();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
+  unsigned long currentTime = micros();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
     rsISR.tLastCheck = currentTime;
       resetAddressPolled();
   }

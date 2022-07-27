@@ -7,6 +7,7 @@
 //            This code was included with version 1 of the RSbus library.
 // history:   2019-01-30 ap V0.1 Initial version
 //            2021-08-18 ap V0.2 millis() replaced by flag
+//            2022-07-27 ap V0.3 millis() replaced by micros()
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -98,8 +99,8 @@ void RSbusHardware::detach(void) {
 //                                         if (addressPolled > 0)
 //                                           if (timeIdle == 0)
 //                                             timeIdle = 1;
-//                                             tLastInterrupt = millis();
-//                                           else if ((millis() - tLastInterrupt) > 4 msec)
+//                                             tLastInterrupt = micros();
+//                                           else if ((micros() - tLastInterrupt) > 4 msec)
 //                                             addressPolled = 0;
 //
 //************************************************************************************************
@@ -108,11 +109,11 @@ void RSbusHardware::checkPolling(void) {
     if (rsISR.timeIdle == 0) {
       // We already had a RS-Bus interrupt just before
       rsISR.timeIdle = 1;
-      rsISR.tLastInterrupt = millis();
+      rsISR.tLastInterrupt = micros();
     }
     else {
       // No ISR since previous call
-      if ((millis() - rsISR.tLastInterrupt) > 4) {
+      if ((micros() - rsISR.tLastInterrupt) > 4000) {
         // A new RS-bus cycle has started. Reset addressPolled
         // If 130 addresses were polled, layer 1 works fine
         if (rsISR.addressPolled == 130) rsSignalIsOK = true;
@@ -123,7 +124,7 @@ void RSbusHardware::checkPolling(void) {
   }
   else
     if (rsSignalIsOK)
-      if ((millis() - rsISR.tLastInterrupt) > 10) rsSignalIsOK = false; // more than 10ms silent
+      if ((micros() - rsISR.tLastInterrupt) > 10000) rsSignalIsOK = false; // more than 10ms silent
   if (rsSignalIsOK == false) rsISR.data2sendFlag = false; // cancel possible data waiting for ISR
 }
 
