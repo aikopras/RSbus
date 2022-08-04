@@ -91,7 +91,7 @@ The default value of the `pulseCountErrorHandling` parameter is two, since the i
 
 See the file [BasicOperation-ErrorHandling.md](extras/BasicOperation-ErrorHandling.md) for further details on possible error sources and error handling.
 
-## The RSbusConnection class ##
+## <a name="RSbusConnection"></a>The RSbusConnection class ##
 For each address this decoder uses a dedicated `RSbusConnection` object, that should be instantiated by the main program. To connect to the master station, each `RSbusConnection` object should start with sending all 8 feedback bits to the master, using `send8bits()`.
 
 - #### uint8_t address ####
