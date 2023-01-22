@@ -2,7 +2,7 @@
 # The RS-bus - Sending data #
 The RS-bus has one master station (usually a Lenz LZV100 or LZV200) and up to 128 slaves (the feedback decoders).
 
-The master station polls sequentially all 128 decoders to ask them to send feedback data, if available. A complete polling sequence consists of 130 pulses (see figure below). If there is no feedback data to be send the time between successive pulse trains will be (around) 200 micro-seconds. After all slaves have been polled, the master station will be silent for a period of around 7 milliseconds (the blue area in the figure), after which a new  pulse train starts.
+The master station polls sequentially all 128 decoders to ask them to send feedback data, if available. A complete polling sequence consists of 130 pulses (see figure below). If there is no feedback data to be send the time between successive pulse trains will be (around) 33 milli-seconds. After all slaves have been polled, the master station will be silent for a period of around 7 milliseconds (the blue area in the figure), after which a new  pulse train starts.
 ![RSBus-pulsetrain](RSBus-pulsetrain.png)
 
 A single pulse (high plus low value) takes 202 microseconds. Depending on the RS-bus hardware and optocoupler, the micro-controller sees a high part of around 113 microseconds and the low part of around 90 (see figure below).
