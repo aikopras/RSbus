@@ -17,6 +17,7 @@
 //            2021-12-13 ap V1.1 Restructured, and selects TCB3 as default when possible
 //            2022-02-05 ap V1.2 For ATMega 2560 selects Timer 3 as default (4&5 are alternatives)
 //            2022-07-27 ap V1.3 Timer 1 is now possible as well
+//            2025-02-16 ap V1.4 All DxCores added. If TCB3 is not defined, RTC is used instead.
 //
 // For different ATmega controllers different RS-bus routines exist
 //
@@ -110,6 +111,7 @@
     !defined(RSBUS_USES_HW_TCB3) && !defined(RSBUS_USES_HW_TCB4)
 
   // For DxCore processors with 40 pins or higher, the default is TCB3.
+  // For DxCore processors with 28 or 32 pins, the default is RTC.
   // For MegaCoreX processors with 40 pins or higher, the default is TCB2.
   // For MegaCoreX processors with 28 or 32 pins, the default is RTC.
   // For ATMega 640, 1280, 1281, 2560 and 2561 the default is a pin interrupt to increment the address
@@ -117,15 +119,17 @@
   // (instead of CheckPolling()) to reset the address being polled
   //
   // TCB0 is used by the AP_DCC_Lib
-  // TCB1 by the servo lib
+  // TCB1 by the standard servo libs
   // On DxCore, the default for millis() is TCB2 (but can easily be changed)
   // On MegaCoreX with 4 timers, millis() uses TCB3 => we use TCB2
   // On MegaCoreX with 3 timers, millis() uses TCB2 => we use RTC
   // On the ATMega 2560, TCB5 is used by the LocoNet library
 
-  #if defined(__AVR_DA__) || defined(__AVR_DB__)
+  #if defined(__AVR_DA__) || defined(__AVR_DB__) || defined(__AVR_DD__) || defined(__AVR_EA__) || defined(__AVR_EB__)
     #if defined(TCB3_CNT)
       #define RSBUS_USES_SW_TCB3
+    #else
+      #define RSBUS_USES_RTC  
     #endif
   #elif defined(MEGACOREX)
     #if defined(TCB3_CNT)
