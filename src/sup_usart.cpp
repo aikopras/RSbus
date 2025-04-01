@@ -8,6 +8,7 @@
 // history:   2019-01-30 ap V0.1 Initial version
 //            2021-07-16 ap V0.2 Changed the way the USART is selected
 //            2021-07-19 ap V0.3 Added support for the 4809 and AVR-Dx controllers
+//            2025-03-08 lr V0.4 Addes support for ATtiny series 0, 1 & 2
 //
 // Based on the `usartNumber` parameter, this code allows selection of which USART will be used
 // for RS-Bus transmission. After the USART is selected, the USART will be initialised as follows: 
@@ -24,7 +25,8 @@
 // More powerful processors, such as the 2560 (used in the Arduino Mega) and newer
 // processors such as the 4809 (used in the Arduino Every) support 4 or even more USARTS.
 // Below an overview of (some) processors that support multiple USARTs.
-// - 2 USARTS: 64, 128, 162, 164, 324, 328PB, 644, 1281, 1284, 2561
+// - 1 USART: `Old` ATMega processors, ATtiny Series 0 and 1
+// - 2 USARTS: 64, 128, 162, 164, 324, 328PB, 644, 1281, 1284, 2561, ATtiny series 2
 // - 4 USARTS: 640, 1280, 2560, 4808, 4809
 // - 6 USARTS: AVR-DA, AVR-DB
 // Note that the first USART on Arduino boards may also be used for the serial monitor.
@@ -34,16 +36,16 @@
 // =========================
 // For old ATMega processors, such as the 8535 and 16A, the data register is called UDR.
 // For later ATMega processors, such as the 328 and 2560, the data register are called UDR0, UDR1, UDR2 and UDR3.
-// For the newest ATMegaX processors, such as the 4808, 4809, DA and DB, the data register are called  
-// USART0.TXDATAL, USART1.TXDATAL, USART2.TXDATAL etc. Note that there are also TXDATAH registers, which
-// are used for sending a ninth data bit, if needed. 
+// For the newest ATMegaX processors, such as the 4808, 4809, ATtiny Series 0/1 & 2, DA and DB, the data registers
+// are called USART0.TXDATAL, USART1.TXDATAL, USART2.TXDATAL etc. Note that there are also TXDATAH registers,
+// which are used for sending a ninth data bit, if needed.
 //
 // New __AVR_MEGAX__ processors
 // ============================
 // All of the AVR processors are known to the compiler as __AVR_MEGA__ processors,
 // but the newer processors have the additional __AVR_MEGAX__ compiler directive. 
 // In literature these newer processors are also known as the megaAVR®-0, tinyAVR®-0,
-// tinyAVR®-1, AVR-DA or AVR-DB devices.
+// tinyAVR®-1, tinyAVR®-2 AVR-DA, AVR-DB, AVR-DD, AVR-EA and AVR-EB Devices
 //
 // With these new __AVR_MEGAX__ processors, Microchip introduced a novel C-like register
 // naming structure and coding style. The consequence of introducing novel register names is 
@@ -78,30 +80,13 @@
 //
 // As opposed to the `old` AVR processors, for the new  __AVR_MEGAX__ processors the USART TX pin 
 // must explicitly be defined as output, which implies that this .cpp code needs to know to which pins
-// the USART will be connected.
+// the USART will be connected. 
 // 
-// Ports to (alternative) pin mapping for the 4808 and 4809
-// ========================================================
-// Depending on the number of pins, upto 4 USARTS are supported, named USART0 till USART4.
-// The mapping between USARTs and standard pins is as follows (between brackets the alternative pins):
-// USART0 TX => PA0 (PA4) - On all versions (28, 32, 40 and 48 pin)
-// USART1 TX => PC0 (PC4) - Alternative pins only on the 40 and 48 pin versions
-// USART2 TX => PF0 (PF4) - Alternative pins not on the 28 pin version
-// USART3 TX => PB0 (PB4) - Normal and alternative pins only on the 48 pin version
-
-// Ports to (alternative) pin mapping for the DA core
-// ==================================================
-// Depending on the number of pins, upto 6 USARTS are supported.
-// The mapping between USARTs and standard pins is as follows (between brackets the alternative pins):
-// USART0 TX => PA0 (PA4) - On all versions (28, 32, 48 and 64 pin)
-// USART1 TX => PC0 (PC4) - Alternative pins only on the 48 and 64 pin versions
-// USART2 TX => PF0 (PF4) - Alternative pins not on the 28 pin version
-// USART3 TX => PB0 (PB4) - Normal and alternative pins only on the 48 and 64 pin versions
-// USART4 TX => PE0 (PE4) - Normal pins only on the 48 and 64 pin versions, alternative pins only on 64
-// USART5 TX => PG0 (PG4) - Normal and alternative pins only on the 64 pin version
+// The comments in the __AVR_MEGAX__ code below explains for each case which pins are default,
+// and which may be used as alternatives.
 //
-// Mapping between Arduino digital pin numbers and TX Pins
-// =======================================================
+// Ols ATMega processors, mapping between Arduino digital pin numbers and TX Pins
+// ==============================================================================
 // - 1   => Serial  (TXD0) - UNO, NANO 
 // - 1   => Serial1 (TXD1) - NANO Every 
 // - 2   => Serial2 (TXD2) - NANO Every 
@@ -158,145 +143,65 @@ USART::USART(void) {
 void USART::init(uint8_t usartNumber, bool defaultPins) {
   // Messages should be: 8 bit, no parity, 1 stop bit, asynchronous mode, 4800 baud.
   //
-  // The code has two parts:
+  // The code has two main parts:
   // 1) For newer __AVR_XMEGA__ processors, that support a C-like interface to access the USART
   // 2) For traditional __AVR_MEGA__ processors.
 
   //****************************************************************************************************
-  // Part 1: __AVR_XMEGA__ processors (such as 4808, 4809, AVR DA, AVR DB, ...)
+  // Part 1: __AVR_XMEGA__ processors (such as 4808, 4809, AVR DA, AVR DB, ATtiny series 0, 1 & 2, ...)
   //****************************************************************************************************
   #if defined(__AVR_XMEGA__) 
+
+    // Set the baudrate. 
     // Baudrate formula for the `new` Xmega controllers 
     // See: TB3216-Getting-Started-with-USART-DS90003216.pdf
     #define USART_BAUD_RATE(BAUD_RATE) ((float)(F_CPU * 64 / (16 * (float)BAUD_RATE)) + 0.5)
-
+    // Set the USART registers and the dataRegister pointer  
+    // The __AVR_XMEGA__ processors may have upto 6 USARTS
     switch (usartNumber) {
       case 0:
         #ifdef  USART0
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART0 uses as default TX pin PA0, and as alternative PA4
-        // Initialise at the default port, by clearing the PORTMUX USART0 fields
-        PORTMUX.USARTROUTEA &= ~(PORTMUX_USART0_gm);
-        if (defaultPins) {
-          PORTA.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART0 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART00_bm; 
-          PORTA.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART0.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART0.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART0.TXDATAL; // The low 8-bit USART data register        
         #endif
       break;
- 
       case 1:
         #ifdef  USART1
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART1 uses as default TX pin PC0, and as alternative PC4
-        // Initialise at the default port, by clearing the PORTMUX USART1 fields
-        PORTMUX.USARTROUTEA &= ~(PORTMUX_USART1_gm);
-        if (defaultPins) {
-          PORTC.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART0 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART10_bm; 
-          PORTC.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART1.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART1.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART1.TXDATAL; // The low 8-bit USART data register        
         #endif
       break;
- 
       case 2:
         #ifdef  USART2
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART2 uses as default TX pin PF0, and as alternative PF4
-        // Initialise at the default port, by clearing the PORTMUX USART2 fields
-        PORTMUX.USARTROUTEA &= ~(PORTMUX_USART2_gm);
-        if (defaultPins) {
-          PORTF.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART2 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART20_bm; 
-          PORTF.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART2.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART2.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART2.TXDATAL; // The low 8-bit USART data register        
         #endif
       break;
- 
       case 3:
         #ifdef  USART3
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART3 uses as default TX pin PB0, and as alternative PB4
-        // Initialise at the default port, by clearing the PORTMUX USART3 fields
-        PORTMUX.USARTROUTEA &= ~(PORTMUX_USART3_gm);
-        if (defaultPins) {
-          PORTB.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART3 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART30_bm; 
-          PORTB.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART3.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART3.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART3.TXDATAL; // The low 8-bit USART data register        
         #endif
       break;
-
       case 4:
         #ifdef  USART4
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART4 uses as default TX pin PE0, and as alternative PE4
-        // Initialise at the default port, by clearing the PORTMUX USART4 fields
-        PORTMUX.USARTROUTEB &= ~(PORTMUX_USART4_gm);
-        if (defaultPins) {
-          PORTE.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART4 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART40_bm; 
-          PORTE.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART4.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART4.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART4.TXDATAL; // The low 8-bit USART data register        
         #endif
       break;
-
       case 5:
         #ifdef  USART5
         #define HAS_USART 
-        // Determine which pin should be used for TX and set this pin as output
-        // USART5 uses as default TX pin PG0, and as alternative PG4
-        // Initialise at the default port, by clearing the PORTMUX USART5 fields
-        PORTMUX.USARTROUTEB &= ~(PORTMUX_USART5_gm);
-        if (defaultPins) {
-          PORTG.DIR |= PIN0_bm;    // Set the default pin as output
-        }
-        else {
-          // Set the PORTMUX USART5 fields to the alternative pin
-          PORTMUX.USARTROUTEA |= PORTMUX_USART50_bm; 
-          PORTG.DIR |= PIN4_bm;    // Set the alternative pin as output          
-        }
-        // Set the USART registers and the dataRegister pointer  
         USART5.BAUD = (uint16_t)USART_BAUD_RATE(4800);
         USART5.CTRLB |= USART_TXEN_bm;  // Turn on transmission (but not reception!) circuitry
         dataRegister = &USART5.TXDATAL; // The low 8-bit USART data register        
@@ -304,6 +209,172 @@ void USART::init(uint8_t usartNumber, bool defaultPins) {
       break;
     }
     
+    // Determine which pin should be used for TX and set this pin as output
+    // This depends on the processor being used
+
+    #if defined(__AVR_TINY_0__) || defined(__AVR_TINY_1__)
+    //==================================================================================================
+    // The ATtiny Series 0 and 1 have a single USART only
+    // For 8-pin devices, the default pin is PA6 and the alternative pin is PA1
+    // For the other devices, the default pin is PB2 and the alternative pin is PA1
+      #ifdef  USART0
+        #if (_AVR_PINCOUNT == 8)
+          bitClear(PORTMUX.CTRLB,0);     //reset value to default
+          if (defaultPins) 
+            PORTA.DIR |= PIN6_bm;        // Set the default pin as output on PB2
+          else {
+            bitSet(PORTMUX.CTRLB,0);     //set alternativ pin
+            PORTA.DIR |= PIN1_bm;        // Set the default pin as output on PA1
+          }
+        #else
+          bitClear(PORTMUX.CTRLB,0);     //reset value to default
+          if (defaultPins) 
+            PORTB.DIR |= PIN2_bm;        // Set the default pin as output on PB2
+          else {
+            bitSet(PORTMUX.CTRLB,0);     //set alternativ pin
+            PORTA.DIR |= PIN1_bm;        // Set the default pin as output on PA1
+          }
+        #endif
+      #endif
+
+    #elif defined(__AVR_TINY_2__)
+    //==================================================================================================
+    // The ATtiny Series 2 has 1 or 2 USARTs
+      switch (usartNumber) {
+        case 0:
+          #ifdef  USART0
+          // USART0 uses as default TX pin PB2, and as alternative PA1
+          // Initialise at the default port, by clearing the PORTMUX USART0 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART0_gm);
+          if (defaultPins) {
+            PORTB.DIR |= PIN2_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART0 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART00_bm; 
+            PORTA.DIR |= PIN1_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+ 
+        case 1:
+          #ifdef  USART1
+          // USART1 uses as default TX pin PA1 and PC2 as alternative
+          // Initialise at the default port, by clearing the PORTMUX USART1 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART1_gm);
+          if (defaultPins) {
+            PORTA.DIR |= PIN1_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART0 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART10_bm; 
+            PORTC.DIR |= PIN2_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+      }
+
+    #else
+    //==================================================================================================
+      // The DxCore processors may have upto 6 USARTS
+      switch (usartNumber) {
+        case 0:
+          #ifdef  USART0
+          // USART0 uses as default TX pin PA0, and as alternative PA4
+          // Initialise at the default port, by clearing the PORTMUX USART0 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART0_gm);
+          if (defaultPins) {
+            PORTA.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART0 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART00_bm; 
+            PORTA.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+ 
+        case 1:
+          #ifdef  USART1
+          // USART1 uses as default TX pin PC0, and as alternative PC4
+          // Initialise at the default port, by clearing the PORTMUX USART1 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART1_gm);
+          if (defaultPins) {
+            PORTC.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART0 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART10_bm; 
+            PORTC.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+ 
+        case 2:
+          #ifdef  USART2
+          // USART2 uses as default TX pin PF0, and as alternative PF4
+          // Initialise at the default port, by clearing the PORTMUX USART2 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART2_gm);
+          if (defaultPins) {
+            PORTF.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART2 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART20_bm; 
+            PORTF.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+ 
+        case 3:
+          #ifdef  USART3
+          // USART3 uses as default TX pin PB0, and as alternative PB4
+          // Initialise at the default port, by clearing the PORTMUX USART3 fields
+          PORTMUX.USARTROUTEA &= ~(PORTMUX_USART3_gm);
+          if (defaultPins) {
+            PORTB.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART3 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART30_bm; 
+            PORTB.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+
+        case 4:
+          #ifdef  USART4
+          // USART4 uses as default TX pin PE0, and as alternative PE4
+          // Initialise at the default port, by clearing the PORTMUX USART4 fields
+          PORTMUX.USARTROUTEB &= ~(PORTMUX_USART4_gm);
+          if (defaultPins) {
+            PORTE.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART4 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART40_bm; 
+            PORTE.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+         #endif
+        break;
+
+        case 5:
+          #ifdef  USART5
+          // Initialise at the default port, by clearing the PORTMUX USART5 fields
+          PORTMUX.USARTROUTEB &= ~(PORTMUX_USART5_gm);
+          if (defaultPins) {
+            PORTG.DIR |= PIN0_bm;    // Set the default pin as output
+          }
+          else {
+            // Set the PORTMUX USART5 fields to the alternative pin
+            PORTMUX.USARTROUTEA |= PORTMUX_USART50_bm; 
+            PORTG.DIR |= PIN4_bm;    // Set the alternative pin as output          
+          }
+          #endif
+        break;
+      }
+    #endif
+
   //****************************************************************************************************
   // Part 2: Other __AVR_MEGA__ processors (such as 8535, 16, 328, 2560, ...)
   //****************************************************************************************************

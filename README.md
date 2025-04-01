@@ -12,7 +12,7 @@ Two Arduino pins are needed for this library, as well as some software:
 - A transmit pin (and USART): needed to send RS-bus messages to the command station
 - The timer associated with the Arduino micros() function
 - In case of a AtMega 2560 processor, Timer 5 is used to update the address being polled.
-- Optional (depends on micro-controller and decoding approach, see below): Real Time Clock or one of the TCB timers. Installation of a MightyCore, MegaCore, MegaCoreX or DxCore board may be necessary (see for the URL the references below).
+- Optional (depends on micro-controller and decoding approach, see below): Real Time Clock or one of the TCB timers. Installation of a MightyCore, MegaCore, MegaTinyCore, MegaCoreX or DxCore board may be necessary (see for the URL the references below).
 
 
 #### Receive pin ####
@@ -25,7 +25,7 @@ The choice of receive pin depends on the micro-controller being used, as well as
 #### Transmit pin ####
 The transmit pin must be one of the USART TX-pins. However, for this library we should not provide the Arduino pin number, but the USART number. Most traditional ATMega processors support a single USART only. More powerful processors, such as the 2560 and newer MegaCoreX and DxCore processors support 4 or even more USARTS. See [src/sup_usart.cpp](src/sup_usart.cpp) for details.
 Below an overview of (some) processors that support multiple USARTs.
-- 2 USARTS: 64, 128, 162, 164, 324, 328PB, 644, 1281, 1284, 2561
+- 2 USARTS: 64, 128, 162, 164, 324, 328PB, 644, 1281, 1284, 2561, ATtiny Series-2
 - 4 USARTS: 640, 1280, 2560, 4808, 4809
 - 6 USARTS: AVR-DA, AVR-DB
 
@@ -47,7 +47,7 @@ To select a different approach, modify the file [src/RSbusVariants.h](src/RSbusV
   An alternative approach is to use the Real Time Clock (RTC) of the modern ATMegaX and DxCore processors (such as 4808, 4809, 128DA48 etc). This code puts less load on the CPU but has as disadvantage that the RS-Bus input signal *MUST* be connected to pin PA0 (ExtClk). This approach requires installation of the MegaCoreX or DxCore board software. ***=> recommended for newer processors on MegaCoreX / DxCore boards. Requires pin PA0!***
 
 - **RSBUS_USES_HW_TCBx (V2):**
-  A similar approach is to use one of the five TCBs of a DxCore processor as event counter. For that purpose the TCB should be used in the "Input capture on Event" mode. That mode exists on novel DxCore (such as the 128DA48) processors, but not on MegaCoreX (such as 4808, 4809) or earlier processors. Like the RTC approach, this approach puts limited load on the CPU,  but as opposed to the RTC approach we have (more) freedom in choosing the RS-bus input pin. This approach requires installation of the DxCore board software. ***=> Supported only on DxCore boards. Useful if pin PA0 is not available.***
+  A similar approach is to use one of the TCBs of a ATtiny Series 2 or DxCore processor as event counter. For that purpose the TCB should be used in the "Input capture on Event" mode. That mode exists on novel DxCore (such as the 128DA48) processors, but not on MegaCoreX (such as 4808, 4809) or earlier processors. Like the RTC approach, this approach puts limited load on the CPU,  but as opposed to the RTC approach we have (more) freedom in choosing the RS-bus input pin. This approach requires installation of the DxCore board software. ***=> Supported only on DxCore boards. Useful if pin PA0 is not available.***
 
 - **RSBUS_USES_SW_4MS (V1):**
   This was the default version in the previous release (V1) of the RS-bus library. Instead of checking every 2ms for a period of silence, we check every 4ms. This may be slightly more efficient, but doesn't allow the detection of parity errors. ***=> included for compatibility reasons.***
@@ -193,7 +193,7 @@ The schematics and PCBs are available from my EasyEda homepage [EasyEda homepage
 - Der-Moba (in German): http://www.der-moba.de/index.php/RS-Rückmeldebus
 - https://sites.google.com/site/dcctrains/rs-bus-feed
 - MegaCoreX: see [MCUdude](https://github.com/MCUdude)
-- DxCore: see [SpenceKonde](https://github.com/SpenceKonde)
+- DxCore and MegaTinyCore: see [SpenceKonde](https://github.com/SpenceKonde)
 
 # Support pages #
 - [Basic operation of the RS-bus feedback decoder](extras/BasicOperation.md)
