@@ -163,9 +163,8 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
-  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
-  rxPinUsed = rxPin;                                 // included, to avoid compiler warnings
-  rxPinUsed = PIN_PA0;                               // PA0 = EXTCLK
+  if (rxPin != PIN_PA0) return;
+  rxPinUsed = rxPin;                                 // PA0 = EXTCLK
   // Step 1: Initialise the RS bus transmission hardware (USART)
   rsUSART.init(usartNumber, !swapUsartPin);
   // Step 2: Initialise the RTC

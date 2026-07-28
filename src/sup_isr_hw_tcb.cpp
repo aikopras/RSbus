@@ -21,16 +21,16 @@
 //
 // Release note:
 // =============
-// The current code for this RS-bus approach still relies on the event library as found in
-// DxCore release 1.3.6. That version of the event library does not (yet) support the use of
-// Arduino pin numbers to specify the RS-bus input pin. Instead we will use a fixed pin (PA0).
-// Newer versions of the event library do support using Arduino pin numbers in the attach()
-// method. Once a new release of DxCore supports this new version, this software will be updated
-// to support complete freedom in choosing the RS-bus input pin
+// Earlier versions of this code used a fixed RS-bus input pin (PA0), because the DxCore Event
+// library shipped with DxCore 1.3.6 (through at least 1.3.10) did not support specifying an
+// Arduino pin number directly - only a fixed generator/pin pair.
+// Starting with DxCore 1.4.0, Event::assign_generator_pin(uint8_t pin_number) accepts an
+// arbitrary Arduino pin number (and safely falls back to a disabled event generator if the pin
+// is invalid), so this restriction no longer applies. This code now uses that full pin
+// flexibility - see initEventSystem() below.
 // References:
 // - https://github.com/SpenceKonde/DxCore
 // - https://github.com/SpenceKonde/DxCore/tree/master/megaavr/libraries/Event
-//
 //
 // TCB as Event User - Introduction
 // ================================
@@ -228,11 +228,10 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
-  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToPort(rxPin) == NOT_A_PIN) return;
   // In principle we could have implemented the 'interruptModeRising' parameter if we include
   // something like PORT*.PIN*CTRL |= PORT_INVEN_bm
   rxPinUsed = rxPin;                                 // Store, to allow a detach later
-  rxPinUsed = PIN_PA0;                               // TODO: Remove, after DxCore event lib has been updated
   rsUSART.init(usartNumber, !swapUsartPin);          // RS-bus transmission hardware (USART)
   initTcb();
   initEventSystem(rxPin);
