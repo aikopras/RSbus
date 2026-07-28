@@ -1,16 +1,17 @@
 //******************************************************************************************************
 //
 // file:      sup_isr_sw_tcb.cpp
-// purpose:   Support file for the RS-bus library. 
-//            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted 
-//            by the master. Once this decoder is polled, the ISR can send data back via its USART. 
+// purpose:   Support file for the RS-bus library.
+//            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted
+//            by the master. Once this decoder is polled, the ISR can send data back via its USART.
 //            Uses a TCB in Periodic Interrupt mode to count the number and measure the length
 //            (=duration) of pulses transmitted by the master.
 //            Of all variants, this should be the most reliable option for the RS-bus.
 //            This option only exists on MegaCoreX and DxCore processors, but not on
 //            traditional ATmega processors (such as the UNO).
 // history:   2021-12-13 ap V1.0 Initial version
-//            2022-07-27 ap V1.1 millis() replaced by micros()
+//            2026-05-16 ap V1.1 Moved back to triggering on falling edge, to correct start bit length
+//            2026-07-28 ap V1.2 Added rxHardwareAttached and check in attach for invalid RX pin numbers
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -51,7 +52,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
   dataWasSendFlag = false;       // No, we didn't send anything yet
   flagParity = false;            // No, we don't need to retranmit after a parity error
   flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
-  tLastCheck = micros();         // Current time
+  tLastCheck = millis();         // Current time
 }
 
 
@@ -130,6 +131,13 @@ void RSbusHardware::initEventSystem(uint8_t rxPin) {
   #endif
   // Start the event channel
   myEvent.start();
+  // Added V1.1 (2026)
+  // Trigger on FALLING edge: invert pin input so Event sees rising = physical falling
+  if (!interruptModeRising) {
+    PORT_t* port = digitalPinToPortStruct(rxPin);
+    uint8_t pos = digitalPinToBitPosition(rxPin);  // DxCore helper
+    (&port->PIN0CTRL)[pos] |= PORT_INVEN_bm;
+  }
   interrupts();
 }
 
@@ -137,7 +145,8 @@ void RSbusHardware::initEventSystem(uint8_t rxPin) {
 RSbusHardware::RSbusHardware() {                     // Constructor
   rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
   swapUsartPin = false;                              // We use the default USART TX pin
-  interruptModeRising = true;                        // Earlier hardware triggered on FALLING
+  rxHardwareAttached = false;                        // We have not yet attached the receive pin
+  interruptModeRising = false;                       // 2026: rolled back to hardware triggered on FALLING
   parityErrors = 0;                                  // Counter for the number of 10,7ms gaps
   pulseCountErrors = 0;                              // Number of times a cycli did not have 130 pulses
   parityErrorHandling = 1;                           // Default: if we have just send data, retransmit!
@@ -145,6 +154,7 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 }
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
   // Store the pin number, to allow a detach later
   rxPinUsed = rxPin;
   // STEP 1: initialise the RS bus transmission hardware (USART)
@@ -153,9 +163,11 @@ void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
   // Step 2: attach the interrupt to the RSBUS_RX pin.
   initTcb();
   initEventSystem(rxPin);
+  rxHardwareAttached = true;                         // Flag, used by detach
 }
 
 void RSbusHardware::detach(void) {
+  if (!rxHardwareAttached) return;
   noInterrupts();
   // Clear all TCB timer settings
   // For "reboot" (jmp 0) it is crucial to set INTCTRL = 0
@@ -167,6 +179,7 @@ void RSbusHardware::detach(void) {
   _timer->CNT = 0;
   _timer->INTFLAGS = 0;
   interrupts();
+  rxHardwareAttached = false;
 }
 
 
@@ -196,25 +209,25 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // checkPolling(): Called from main as frequent as possible
 //******************************************************************************************************
 // See for details: ../extras/BasicOperation-CheckPolling.md
-// Every 2ms we check if addressPolled has changed or not  
+// Every 2ms we check if addressPolled has changed or not
 // CheckPolling() ignores all checks, except check 3, 5 and check 7
-// - check 1: addressPolled is 130, but lastPulseCnt has a lower value  
-// - check 2: addressPolled is 130, and lastPulseCnt is now also 130 => silence 
-// - check 3: Period of silence: set addressPolled and lastPulseCnt to 0 
-// - check 4: same as check 3 
-// - check 5: only happens after more than 8ms of silence: parity error (or signal loss) 
-// - check 6: same as check 5 
+// - check 1: addressPolled is 130, but lastPulseCnt has a lower value
+// - check 2: addressPolled is 130, and lastPulseCnt is now also 130 => silence
+// - check 3: Period of silence: set addressPolled and lastPulseCnt to 0
+// - check 4: same as check 3
+// - check 5: only happens after more than 8ms of silence: parity error (or signal loss)
+// - check 6: same as check 5
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
-  unsigned long currentTime = micros();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
-    rsISR.tLastCheck = currentTime;   
+  unsigned long currentTime = millis();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
+    rsISR.tLastCheck = currentTime;
     uint16_t currentCnt = rsISR.addressPolled;         // will not chance during sub routine
     if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period
       rsISR.timeIdle++;                                // Counts which 2ms check we are in
       switch (rsISR.timeIdle) {                        // See figures in documentation
       case 1:                                          // addressPolled differs from previous count
-      case 2:                                          // May also occur if UART send byte 
+      case 2:                                          // May also occur if UART send byte
       case 4:                                          // Same as case 3, nothing new
       case 6:                                          // Same as case 5, nothing new
       break;
@@ -234,7 +247,7 @@ void RSbusHardware::checkPolling(void) {
             triggerRetransmission(pulseCountErrorHandling, rsISR.flagPulseCount);
           }
         }
-        rsISR.addressPolled = 0;                       // Reset 
+        rsISR.addressPolled = 0;                       // Reset
         rsISR.lastPulseCnt = 0;                        // Reset
       break;
       case 5:                                          // 8ms of silence => Parity error

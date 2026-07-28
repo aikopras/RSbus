@@ -1,12 +1,12 @@
 //******************************************************************************************************
 //
 // file:      sup_isr_hw_rtc.cpp
-// purpose:   Support file for the RS-bus library. 
+// purpose:   Support file for the RS-bus library.
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted by
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
 //            Uses the Real Time Counter (RTC) of MegaCoreX and DxCore processors.
 // history:   2021-10-10 ap V1.0 initial version
-//            2022-07-27 ap V1.1 millis() replaced by micros()
+//            2026-07-27 ap V1.1 Added rxHardwareAttached and check in attach for invalid RX pin numbers
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -19,26 +19,26 @@
 // RTC Introduction
 // ================
 // The RTC has two modes: Real-Time Counter (RTC) and Periodic Interrupt Timer (PIT).
-// Both modes use the same clock source (CLK_RTC), which is either an external 32Khz X-tal or 
+// Both modes use the same clock source (CLK_RTC), which is either an external 32Khz X-tal or
 // pulses on the EXTCLK pin (PA0).
 //
 // For DCC decoders all modes with an external (aynchronous) 32Khz clock don't seem very
 // useful. However, the ability to count pulses from the EXTCLK pin may be interesting for
-// RS-Bus operation. 
-// 
+// RS-Bus operation.
+//
 // RTC Mode - Pulse Counter
 // ========================
-// One of the RTC mode options is to count input pulses on the EXTCLK input pin (PA0). 
+// One of the RTC mode options is to count input pulses on the EXTCLK input pin (PA0).
 // The number of pulses is stored in a Counter (CNT) register and compared to the content of the
-// Period (PER) register and Compare (CMP) register. The RTC can generate interrupts on compare 
-// match and/or overflow. It generates the compare interrupt at the first count after the counter 
-// equals the Compare register value, and an overflow interrupt at the first count after the 
+// Period (PER) register and Compare (CMP) register. The RTC can generate interrupts on compare
+// match and/or overflow. It generates the compare interrupt at the first count after the counter
+// equals the Compare register value, and an overflow interrupt at the first count after the
 // counter value equals the Period register value. The overflow will reset the counter value
 // to zero.
-// 
+//
 // In this mode the RTC can count RS-Bus pulses and generate an interrupt whenever the number
 // of pulses matches the RS-Bus address (Compare Match). Since the counter automatically resets
-// after an overflow, the last pulse of each RS-bus polling cycle should be used to trigger the 
+// after an overflow, the last pulse of each RS-bus polling cycle should be used to trigger the
 // overflow interrupt.
 //
 // The RS-Bus should be connected to the EXTCLK input pin, which is PA0.
@@ -54,11 +54,11 @@
 // At first sight a good solution seems to set in this silence period the counter value to zero.
 // Unfortunately that doesn't work, since (as stated in the datasheet) "due to the
 // synchronization between the RTC clock and main clock domains, there is a latency of two RTC
-// clock cycles from updating the register until this has an effect". 
+// clock cycles from updating the register until this has an effect".
 // The right solution therefore is to set the counter to 3 (to compensate for the synchronization
 // between both clock domains. In this way the overflow will be triggered at the end of each
 // polling cycle.
-// 
+//
 // Initialisation is needed after start-up or after the RS-bus signal was lost and reappears.
 // To determine if initialisation is needed, checks are performed during the silence period
 // if the counter value matches zero. If this is not the case, a new initialisation takes place.
@@ -68,28 +68,28 @@
 // The RS-bus address (RTC.CMP) can be changed in the CMP match ISR. Addresses between 3 and 128
 // become active in the next polling cycle. Since register changes take effect only after 2
 // RTC clock transistions, the addresses 1 and 2 will not be active in the next polling cycle,
-// but only in a subsequent polling cycle after the next polling cycle has been completed. 
-// 
+// but only in a subsequent polling cycle after the next polling cycle has been completed.
+//
 // RS-Bus input signal
 // ===================
-// The RTC count positive edges only. 
+// The RTC count positive edges only.
 //
 // Parity errors
 // =============
-// If the master station detects a parity error, it will enlarge the silence period 
+// If the master station detects a parity error, it will enlarge the silence period
 //
 // Pins:
 // =====
 // - PA0: RS-Bus in (EXTCLK).
 // - a transmit pin for the UART
-// 
+//
 // References:
 // ===========
 // Microchip manual TB3218
 // http://ww1.microchip.com/downloads/en/Appnotes/TB3213-Getting-Started-with-RTC-DS90003213B.pdf
 //
 //************************************************************************************************
-// Timing overview   
+// Timing overview
 //
 // 1) Normal operation (no parity errors)
 //   _   _   _   _   _   _   _                                       _   _   _   _   _   _
@@ -99,10 +99,10 @@
 //
 //
 // 2) Parity error(s)
-//   _   _   _   _   _   _   _                                                    _   _  
-//  | | | | | | | | | | | | | |                                                  | | | | 
+//   _   _   _   _   _   _   _                                                    _   _
+//  | | | | | | | | | | | | | |                                                  | | | |
 //  | |_| |_| |_| |_| |_| |_| |__________________________________________________| |_| |_
-//                             <--------------------- 10,7ms -------------------> 
+//                             <--------------------- 10,7ms ------------------->
 //
 //******************************************************************************************************
 #include <Arduino.h>
@@ -133,10 +133,10 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
   dataWasSendFlag = false;       // No, we didn't send anything yet
   flagParity = false;            // No, we don't need to retranmit after a parity error
   flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
-  tLastCheck = micros();         // Current time
+  tLastCheck = millis();         // Current time
 }
 
-   
+
 //******************************************************************************************************
 //******************************************************************************************************
 // The RSbusHardware class is responsible for controlling the RS-bus hardware, thus the RTC that counts
@@ -153,6 +153,7 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
 RSbusHardware::RSbusHardware() {                     // Constructor
   rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
   swapUsartPin = false;                              // We use the default USART TX pin
+  rxHardwareAttached = false;                        // We have not yet attached the receive pin
   interruptModeRising = true;                        // Earlier hardware triggered on FALLING
   parityErrors = 0;                                  // Counter for the number of 10,7ms gaps
   pulseCountErrors = 0;                              // Number of times a cycli did not have 130 pulses
@@ -162,6 +163,7 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
   rxPinUsed = rxPin;                                 // included, to avoid compiler warnings
   rxPinUsed = PIN_PA0;                               // PA0 = EXTCLK
   // Step 1: Initialise the RS bus transmission hardware (USART)
@@ -177,13 +179,16 @@ void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
   RTC.PER = 129;                                     // Total number of pulses
   RTC.CLKSEL = RTC_CLKSEL_EXTCLK_gc;                 // Select EXTCLK as clock input
   RTC.CTRLA = RTC_RTCEN_bm;                          // Enable the RTC
-  RTC.INTCTRL = RTC_CMP_bm | RTC_OVF_bm;             // Enable Compare Match and Overflow Interrupt    
+  RTC.INTCTRL = RTC_CMP_bm | RTC_OVF_bm;             // Enable Compare Match and Overflow Interrupt
+  rxHardwareAttached = true;                         // Flag, used by detach
 }
 
 
 void RSbusHardware::detach(void) {
+  if (!rxHardwareAttached) return;
   RTC.CTRLA &= ~RTC_RTCEN_bm;                        // Disable the RTC
   RTC.INTCTRL = 0;
+  rxHardwareAttached = false;
 }
 
 
@@ -213,25 +218,25 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // checkPolling(): Called from main as frequent as possible
 //******************************************************************************************************
 // See for details: ../extras/BasicOperation-CheckPolling.md
-// Every 2ms we check if RTC.CNT has changed or not  
+// Every 2ms we check if RTC.CNT has changed or not
 // CheckPolling() ignores all checks, except check 3 and check 5
-// - check 1: RTC.CNT does not match previous count 
-// - check 2: RTC.CNT matches previous count, but may happen during UART byte transmission 
+// - check 1: RTC.CNT does not match previous count
+// - check 2: RTC.CNT matches previous count, but may happen during UART byte transmission
 // - check 3: RTC.CNT matches previous count, and can only happen during a period of silence !!!
-// - check 4: same as check 3 
-// - check 5: only happens after more than 8ms of silence: parity error (or signal loss) 
-// - check 6: same as check 5 
+// - check 4: same as check 3
+// - check 5: only happens after more than 8ms of silence: parity error (or signal loss)
+// - check 6: same as check 5
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
-  unsigned long currentTime = micros();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
-    rsISR.tLastCheck = currentTime;   
+  unsigned long currentTime = millis();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
+    rsISR.tLastCheck = currentTime;
     uint16_t currentCnt = RTC.CNT;                     // will not chance during sub routine
     if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period
       rsISR.timeIdle++;                                // Counts which 2ms check we are in
       switch (rsISR.timeIdle) {                        // See figures above
       case 1:                                          // RTC.CNT differs from previous count
-      case 2:                                          // May also occur if UART send byte 
+      case 2:                                          // May also occur if UART send byte
       case 4:                                          // Same as case 3, nothing new
       case 6:                                          // Same as case 5, nothing new
       break;

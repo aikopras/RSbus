@@ -11,6 +11,7 @@
 //            2021-07-26 ap v0.2 Default type is now 'Feedback decoder'
 //            2021-09-30 ap v1.0 Different types of hardware are supported
 //            2021-11-29 ap v2.1 Forward Error Correction added (irrespective of transmission errors)
+//            2026-07-27 ap v2.2 util/parity.h replaced to __builtin_parity(value)
 //
 //
 //
@@ -35,11 +36,10 @@
 //      |                       |       |                       | +---->|                       |
 //      +-----------------------+       +-+---------------------+ |     |                       |
 //                                        +-----------------------+     +-----------------------+
-//                      
+//
 //
 //******************************************************************************************************
 #include <Arduino.h>
-#include <util/parity.h>               // Needed to calculate the parity bit
 #include "RSbus.h"
 #include "sup_isr.h"
 #include "sup_fifo.h"
@@ -71,7 +71,7 @@ const uint8_t NIBBLEBIT = 3;           // low or high order nibble
 const uint8_t TT_BIT_0  = 2;           // this bit must always be 0
 const uint8_t TT_BIT_1  = 1;           // this bit must always be 1
 const uint8_t PARITY    = 0;           // parity bit; will be calculated by software
-  
+
 
 RSbusConnection::RSbusConnection() {
   // The following kind of RS-bus modules exist (see also http://www.der-moba.de/):
@@ -102,22 +102,22 @@ void RSbusConnection::format_nibble(uint8_t value) {
   // Step 1A: set the `type' bit
   if (type == Switch)   {value |= (1<<TT_BIT_0) | (0<<TT_BIT_1);}  // switch decoder with feedback
   if (type == Feedback) {value |= (0<<TT_BIT_0) | (1<<TT_BIT_1);}  // feedback module
-  // Step 1B: Set the parity bit
-  parity = parity_even_bit(value);              // check parity
-  if (parity)                                   // if parity is even
-    {value |= (0<<PARITY);}                     // clear the parity bit
-    else {value |= (1<<PARITY);}                // set the parity bit
+  // Step 1B: Set the parity bit                // 2026-07-27: ap changed
+  parity = __builtin_parity(value);             // 1 if odd (uneven), 0 if even
+  if (parity)
+    {value |= (1 << PARITY);}                   // Sets the bit to 1
+    else {value &= ~(1 << PARITY);}             // Clears the bit to 0
   // Step 2: store the formatted `data byte' into the FIFO queue
-  // Data in this queue will later be send (using the USART) from send_nibble(). 
+  // Data in this queue will later be send (using the USART) from send_nibble().
   my_fifo.push(value);
 }
 
 
 void RSbusConnection::send4bits(Nibble_t nibble, uint8_t value) {
-  // Takes a 4 bit value to create a single RS-bus nibble and stores this nibble in a FIFO 
-  // This nibble is later send to the RS-bus master station using sendnibble() 
+  // Takes a 4 bit value to create a single RS-bus nibble and stores this nibble in a FIFO
+  // This nibble is later send to the RS-bus master station using sendnibble()
   // nibble = 1..2, specifies if we use the first or the second nibble
-  // data   = 0..15  
+  // data   = 0..15
   uint8_t data;
   uint8_t nibbleValue;
   if (nibble == LowBits) nibbleValue = 0;
@@ -131,11 +131,11 @@ void RSbusConnection::send4bits(Nibble_t nibble, uint8_t value) {
   for (uint8_t i = 0; i <= forwardErrorCorrection; i++) {format_nibble(data);}
 }
 
-    
+
 void RSbusConnection::send8bits(uint8_t value) {
-  // Takes an 8 bit value to create two RS-bus nibbles and stores these nibbles in a FIFO 
-  // These nibbles will later be send to the RS-bus master station using sendnibble() 
-  // data = 0..255  
+  // Takes an 8 bit value to create two RS-bus nibbles and stores these nibbles in a FIFO
+  // These nibbles will later be send to the RS-bus master station using sendnibble()
+  // data = 0..255
   // Note that bit order should be changed.
   const uint8_t NIBBLEBIT = 3;       // low or high order nibble
   uint8_t dataNibble1;
@@ -175,8 +175,8 @@ uint8_t RSbusConnection::sendNibble(void) {
         result = 1;                            // Succesfully presented the nibble to the rs_interrupt routine
       }
     }
-  }   
-  return result; 
+  }
+  return result;
 }
 
 
@@ -208,5 +208,3 @@ void RSbusConnection::checkConnection(void) {
     rsISR.data2sendFlag = false;               // Cancel possible data waiting for ISR
   }
 }
-
-   

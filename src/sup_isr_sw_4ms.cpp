@@ -1,13 +1,14 @@
 //*******************************************************************************************************
 //
-// file:      sup_isr_sw.cpp
-// purpose:   Support file for the RS-bus library. 
+// file:      sup_isr_sw_4ms.cpp
+// purpose:   Support file for the RS-bus library.
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted by
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
 //            This code was included with version 1 of the RSbus library.
 // history:   2019-01-30 ap V0.1 Initial version
 //            2021-08-18 ap V0.2 millis() replaced by flag
 //            2022-07-27 ap V0.3 millis() replaced by micros()
+//            2026-07-28 ap V0.4 Added rxHardwareAttached and check in attach for invalid RX pin numbers
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -65,22 +66,27 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
 RSbusHardware::RSbusHardware() {                     // Constructor
   rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
   swapUsartPin = false;                              // We use the default USART TX pin
+  rxHardwareAttached = false;                        // We have not yet attached the receive pin
   interruptModeRising = true;                        // Earlier hardware triggered on FALLING
 }
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
   // Step 1: attach the interrupt to the RSBUS_RX pin.
   if (interruptModeRising) attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, RISING);
   else attachInterrupt(digitalPinToInterrupt(rxPin), rs_interrupt, FALLING);
-  // Store the pin number, to allow a detach later
+  // Store the pin number and set a flag, to allow a detach later
   rxPinUsed = rxPin;
+  rxHardwareAttached = true;
   // STEP 2: initialise the RS bus transmission hardware (USART)
   // Use swapUsartPin to set the defaultUsartPins parameter.
   rsUSART.init(usartNumber, !swapUsartPin);
 }
 
 void RSbusHardware::detach(void) {
+  if (!rxHardwareAttached) return;
   detachInterrupt(digitalPinToInterrupt(rxPinUsed));
+  rxHardwareAttached = false;
 }
 
 
@@ -99,8 +105,8 @@ void RSbusHardware::detach(void) {
 //                                         if (addressPolled > 0)
 //                                           if (timeIdle == 0)
 //                                             timeIdle = 1;
-//                                             tLastInterrupt = micros();
-//                                           else if ((micros() - tLastInterrupt) > 4 msec)
+//                                             tLastInterrupt = millis();
+//                                           else if ((millis() - tLastInterrupt) > 4 msec)
 //                                             addressPolled = 0;
 //
 //************************************************************************************************
@@ -109,11 +115,11 @@ void RSbusHardware::checkPolling(void) {
     if (rsISR.timeIdle == 0) {
       // We already had a RS-Bus interrupt just before
       rsISR.timeIdle = 1;
-      rsISR.tLastInterrupt = micros();
+      rsISR.tLastInterrupt = millis();
     }
     else {
       // No ISR since previous call
-      if ((micros() - rsISR.tLastInterrupt) > 4000) {
+      if ((millis() - rsISR.tLastInterrupt) > 4) {
         // A new RS-bus cycle has started. Reset addressPolled
         // If 130 addresses were polled, layer 1 works fine
         if (rsISR.addressPolled == 130) rsSignalIsOK = true;
@@ -124,7 +130,7 @@ void RSbusHardware::checkPolling(void) {
   }
   else
     if (rsSignalIsOK)
-      if ((micros() - rsISR.tLastInterrupt) > 10000) rsSignalIsOK = false; // more than 10ms silent
+      if ((millis() - rsISR.tLastInterrupt) > 10) rsSignalIsOK = false; // more than 10ms silent
   if (rsSignalIsOK == false) rsISR.data2sendFlag = false; // cancel possible data waiting for ISR
 }
 
@@ -135,12 +141,12 @@ void RSbusHardware::checkPolling(void) {
 //******************************************************************************************************
 void rs_interrupt(void) {
   if (rsISR.data2sendFlag) {
-    if (rsISR.address2use == rsISR.addressPolled) {  
+    if (rsISR.address2use == rsISR.addressPolled) {
       // We have data to send, it is our turn and the decoder is synchronised
       // Note: general USART code often includes some kind of flow control, but that is not needed here
       (*rsUSART.dataRegister) = rsISR.data2send;
       rsISR.data2sendFlag = false;
-    } 
+    }
   }
   rsISR.addressPolled ++;        // Address of slave that gets his turn next
   rsISR.timeIdle = 0;            // Reset the counter since the command station is not idle now

@@ -1,14 +1,15 @@
 //******************************************************************************************************
 //
 // file:      sup_isr_hw_tcb.cpp
-// purpose:   Support file for the RS-bus library. 
+// purpose:   Support file for the RS-bus library.
 //            Defines the Interrupt Service routine (ISR) that counts the polling pulses transmitted by
 //            the master. Once this decoder is polled, the ISR can send data back via its USART.
 //            Uses a TCB as event counter to poll the pulses transmitted by the master.
-//            The option of using TCB as event counter only exists on DxCore processors, but not on 
+//            The option of using TCB as event counter only exists on DxCore processors, but not on
 //            MegaCoreX (such as the Nano Every) or traditional ATmega processors (such as the UNO).
 // history:   2021-10-16 ap V1.0 initial version
-//            2022-07-27 ap V1.2 millis() replaced by micros()
+//            2026-05-16 ap V1.1 Moved back to triggering on falling edge, to correct start bit length
+//            2026-07-28 ap V1.2 Added rxHardwareAttached and check in attach for invalid RX pin numbers
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -20,13 +21,13 @@
 //
 // Release note:
 // =============
-// The current code for this RS-bus approach still relies on the event library as found in  
-// DxCore release 1.3.6. That version of the event library does not (yet) support the use of 
-// Arduino pin numbers to specify the RS-bus input pin. Instead we will use a fixed pin (PA0). 
+// The current code for this RS-bus approach still relies on the event library as found in
+// DxCore release 1.3.6. That version of the event library does not (yet) support the use of
+// Arduino pin numbers to specify the RS-bus input pin. Instead we will use a fixed pin (PA0).
 // Newer versions of the event library do support using Arduino pin numbers in the attach()
 // method. Once a new release of DxCore supports this new version, this software will be updated
-// to support complete freedom in choosing the RS-bus input pin  
-// References: 
+// to support complete freedom in choosing the RS-bus input pin
+// References:
 // - https://github.com/SpenceKonde/DxCore
 // - https://github.com/SpenceKonde/DxCore/tree/master/megaavr/libraries/Event
 //
@@ -36,32 +37,32 @@
 // TCB can be configured as event user. Two types of event usage can be configured:
 // 1) CAPT: in this mode the normal clock is used, and captured in case of an event
 // 2) COUNT: Events are used as clock source, and counted according to the selected mode
-// => We need to configure as COUNT 
+// => We need to configure as COUNT
 //
 // TCB as Event User - COUNT
 // -------------------------
 // Copied from the AVR128DA datasheet:
 // The COUNT event user is enabled on the peripheral by modifying the Clock Select
 // (CLKSEL) bit field in the Control A (TCBn.CTRLA) register to EVENT and setting up
-// the Event System accordingly. If the Capture Event Input Enable (CAPTEI) bit in the 
+// the Event System accordingly. If the Capture Event Input Enable (CAPTEI) bit in the
 // Event Control (TCBn.EVCTRL) register is written to ‘1’, incoming events will result
 // in an event action as defined by the Event Edge (EDGE) bit in Event Control (TCBn.EVCTRL)
 // register and the Timer Mode (CNTMODE) bit field in Control B (TCBn.CTRLB) register.
 // The event needs to last for at least one CLK_PER cycle to be recognized.
-//  
+//
 // The Timer Mode (CNTMODE) bit field in Control B (TCBn.CTRLB) register must be set to
 // Periodic Interrupt Mode.
-// 
+//
 // TCB - Periodic Interrupt Mode
 // -----------------------------
 // In Periodic Interrupt mode, the counter (TCBx.CNT) counts to the value stored in TCBx.CCMP.
 // If the value is matched, a CAPT interrupt is generated. In the CAPT ISR the interrup flag
 // must be cleared, and data (if available) may be transmitted using the USART.
 //
-// According to the datasheet, a CAPT interrupt automatically resets / clears the counter 
+// According to the datasheet, a CAPT interrupt automatically resets / clears the counter
 // (TCBx.CNT) to bottom (0). To ensure that after a complete pulse train (thus at the start
 // of the silence period) the counter value is 130, the ISR will "reload" the counter with
-// the previous CCMP value + 1.  
+// the previous CCMP value + 1.
 //
 // TCB initialisation
 // ------------------
@@ -72,7 +73,7 @@
 // if the counter value matches 130. If this is not the case, a new initialisation takes place.
 // If the RS-bus address has changed, CheckPolling() will load the Compare register (TCBx.CCMP)
 // to refelct the new RS-bus address
-// 
+//
 // RS-Bus input pin
 // ================
 // The RS-Bus can be connected to any input pin that is available to the Event system.
@@ -81,7 +82,7 @@
 //
 // Parity errors
 // =============
-// If the master station detects a parity error, it will enlarge the silence period 
+// If the master station detects a parity error, it will enlarge the silence period
 //
 // Pins:
 // =====
@@ -121,10 +122,10 @@ RSbusIsr::RSbusIsr(void) {       // Define the constructor
   dataWasSendFlag = false;       // No, we didn't send anything yet
   flagParity = false;            // No, we don't need to retranmit after a parity error
   flagPulseCount = false;        // No, we don't need to retranmit after a pulse count error
-  tLastCheck = micros();         // Current time
+  tLastCheck = millis();         // Current time
 }
 
-   
+
 //******************************************************************************************************
 //******************************************************************************************************
 // The RSbusHardware class is responsible for controlling the RS-bus hardware, thus the TCB that counts
@@ -175,7 +176,7 @@ void RSbusHardware::initTcb(void) {
   _timer->CTRLB = 0;
   _timer->EVCTRL = 0;
   _timer->INTCTRL = 0;
-  // Initialise the control registers 
+  // Initialise the control registers
   _timer->CTRLA = TCB_ENABLE_bm | TCB_CLKSEL_EVENT_gc; // Enable TCB and count Events
   _timer->CTRLB = TCB_CNTMODE_INT_gc;                  // Periodic Interrupt Mode
   _timer->EVCTRL = TCB_CAPTEI_bm | TCB_FILTER_bm;      // Enable input capture events and noise cancelation
@@ -203,6 +204,13 @@ void RSbusHardware::initEventSystem(uint8_t rxPin) {
   #endif
   // Start the event channel
   myEvent.start();
+  // Added V1.1 (2026)
+  // Trigger on FALLING edge: invert pin input so Event sees rising = physical falling
+  if (!interruptModeRising) {
+    PORT_t* port = digitalPinToPortStruct(rxPin);
+    uint8_t pos = digitalPinToBitPosition(rxPin);  // DxCore helper
+    (&port->PIN0CTRL)[pos] |= PORT_INVEN_bm;
+  }
   interrupts();
 }
 
@@ -210,7 +218,8 @@ void RSbusHardware::initEventSystem(uint8_t rxPin) {
 RSbusHardware::RSbusHardware() {                     // Constructor
   rsSignalIsOK = false;                              // No valid RS-bus signal detected yet
   swapUsartPin = false;                              // We use the default USART TX pin
-  interruptModeRising = true;                        // Earlier hardware triggered on FALLING
+  rxHardwareAttached = false;                        // We have not yet attached the receive pin
+  interruptModeRising = false;                       // 2026: rolled back to hardware triggered on FALLING
   parityErrors = 0;                                  // Counter for the number of 10,7ms gaps
   pulseCountErrors = 0;                              // Number of times a cycli did not have 130 pulses
   parityErrorHandling = 1;                           // Default: if we have just send data, retransmit!
@@ -219,17 +228,20 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToInterrupt(rxPin) == NOT_AN_INTERRUPT) return;
   // In principle we could have implemented the 'interruptModeRising' parameter if we include
-  // something like PORT*.PIN*CTRL |= PORT_INVEN_bm  
+  // something like PORT*.PIN*CTRL |= PORT_INVEN_bm
   rxPinUsed = rxPin;                                 // Store, to allow a detach later
-  rxPinUsed = PIN_PA0;                               // TODO: Remove, after DxCore event lib has been updated 
+  rxPinUsed = PIN_PA0;                               // TODO: Remove, after DxCore event lib has been updated
   rsUSART.init(usartNumber, !swapUsartPin);          // RS-bus transmission hardware (USART)
   initTcb();
   initEventSystem(rxPin);
+  rxHardwareAttached = true;                         // Flag, used by detach
 }
 
 
 void RSbusHardware::detach(void) {
+  if (!rxHardwareAttached) return;
   noInterrupts();
   // Clear all TCB timer settings
   // For "reboot" (jmp 0) it is crucial to set INTCTRL = 0
@@ -241,6 +253,7 @@ void RSbusHardware::detach(void) {
   _timer->CNT = 0;
   _timer->INTFLAGS = 0;
   interrupts();
+  rxHardwareAttached = false;
 }
 
 
@@ -272,22 +285,22 @@ void RSbusHardware::triggerRetransmission(uint8_t strategy, bool justTransmitted
 // See for details: ../extras/BasicOperation-CheckPolling.md
 // CheckPolling() ignores all checks, except check 3 and check 5
 // - check 1: ignore
-// - check 2: ignore 
+// - check 2: ignore
 // - check 3: TCBx.CCMP should be 130 => reinitialise values, including RS-bus address and flags
-// - check 4: ignore 
-// - check 5: only happens after more than 8ms of silence: parity error (or signal loss) 
-// - check 6: ignore 
+// - check 4: ignore
+// - check 5: only happens after more than 8ms of silence: parity error (or signal loss)
+// - check 6: ignore
 // - check 7: 12ms of silence: seems we lost the RS-signal
 void RSbusHardware::checkPolling(void) {
-  unsigned long currentTime = micros();                // will not chance during sub routine
-  if ((currentTime - rsISR.tLastCheck) >= 2000) {      // Check once every 2 ms
+  unsigned long currentTime = millis();                // will not chance during sub routine
+  if ((currentTime - rsISR.tLastCheck) >= 2) {         // Check once every 2 ms
     rsISR.tLastCheck = currentTime;
     uint16_t currentCnt = timer_CNT;                   // will not chance during sub routine
     if (currentCnt == rsISR.lastPulseCnt) {            // This may be a silence period
       rsISR.timeIdle++;                                // Counts which 2ms check we are in
       switch (rsISR.timeIdle) {                        // See figures above
       case 1:                                          // RTC.CNT differs from previous count
-      case 2:                                          // May also occur if UART send byte 
+      case 2:                                          // May also occur if UART send byte
       case 4:                                          // Same as case 3, nothing new
       case 6:                                          // Same as case 5, nothing new
       break;
@@ -362,7 +375,7 @@ void RSbusHardware::checkPolling(void) {
     rsISR.data2sendFlag = false;         // RSbusConnection::sendNibble may now prepare new data
     rsISR.dataWasSendFlag = true;        // used to trigger retransmission after arrors
     rsISR.data4IsrFlag = false;          // CheckPolling may now select a new RS-bus address
-  } 
+  }
 }
 
 #endif // #if defined(RSBUS_USES_HW_TCB....)
