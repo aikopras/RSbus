@@ -154,7 +154,7 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 }
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
-  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToPort(rxPin) == NOT_A_PIN) return;
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToPort(rxPin) == NOT_A_PORT) return;
   // Store the pin number, to allow a detach later
   rxPinUsed = rxPin;
   // STEP 1: initialise the RS bus transmission hardware (USART)

@@ -228,7 +228,7 @@ RSbusHardware::RSbusHardware() {                     // Constructor
 
 
 void RSbusHardware::attach(uint8_t usartNumber, uint8_t rxPin) {
-  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToPort(rxPin) == NOT_A_PIN) return;
+  if (rxPin >= NUM_DIGITAL_PINS || digitalPinToPort(rxPin) == NOT_A_PORT) return;
   // In principle we could have implemented the 'interruptModeRising' parameter if we include
   // something like PORT*.PIN*CTRL |= PORT_INVEN_bm
   rxPinUsed = rxPin;                                 // Store, to allow a detach later
