@@ -19,6 +19,7 @@
 //            2022-07-27 ap V1.3 Timer 1 is now possible as well
 //            2025-02-16 ap V1.4 All DxCores added. If TCB3 is not defined, RTC is used instead.
 //            2025-03-08 lr V1.5 Added support for MEGATINY core / ATtiny series 0, 1 and 2
+//            2026-07-29 ap V1.6 Modified #define structure
 //
 // This source file is subject of the GNU general public license 3,
 // that is available at the world-wide-web at http://www.gnu.org/licenses/gpl.txt
@@ -64,7 +65,7 @@
 // ===================
 // An alternative approach is to use the Real Time Clock (RTC) of the modern ATMegaX and DxCore
 // processors (such as 4808, 4809, 128DA48 etc). This code puts less load on the CPU but has as
-// disadvantage that the RS-Bus input signal MUST be connected to pin PA0. 
+// disadvantage that the RS-Bus input signal MUST be connected to pin PA0.
 //
 // RSBUS_USES_HW_TCBx (V2)
 // =======================
@@ -74,7 +75,7 @@
 // (such as 4808, 4809), the ATtiny 0- and 1-series, and "traditional" ATMega processors.
 // Like the RTC approach, this approach puts limited load on the CPU, but as opposed to the
 // RTC approach we have (more) freedom in choosing the RS-bus input pin.
-//  
+//
 // RSBUS_USES_SW_4MS (V1)
 // ======================
 // This is an older version of the default approach. Instead of checking every 2ms for a period
@@ -125,9 +126,8 @@
     #if defined(TCB3_CNT)
       #define RSBUS_USES_SW_TCB3
     #else
-      #define RSBUS_USES_RTC  
+      #define RSBUS_USES_RTC
     #endif
-  #endif  
 
   // MegaCoreX:
   // ----------
@@ -135,13 +135,12 @@
   // On MegaCoreX with 3 timers, millis() uses TCB2 => we use RTC
   // For MegaCoreX processors with 40 pins or higher, the default is TCB2.
   // For MegaCoreX processors with 28 or 32 pins, the default is RTC.
-  #if defined(MEGACOREX)
+  #elif defined(MEGACOREX)
     #if defined(TCB3_CNT)             // TCB3 is used for millis
       #define RSBUS_USES_SW_TCB2      // so we use TCB2
     #else
       #define RSBUS_USES_RTC
     #endif
-  #endif
 
   // megaTinyCore:
   // -------------
@@ -149,7 +148,7 @@
   // for millis()/micros(). See: https://github.com/SpenceKonde/megaTinyCore?tab=readme-ov-file
   // For ATtiny serie 0 & 1, the default for millis() is RTC (in most cases).
   // For ATtiny serie 2, the default for millis() is TCB1.
-  #if defined(__AVR_TINY_0__) || defined(__AVR_TINY_1__) || defined(__AVR_TINY_2__)
+  #elif defined(__AVR_TINY_0__) || defined(__AVR_TINY_1__) || defined(__AVR_TINY_2__)
     #if defined(__AVR_TINY_2__)
     // For the ATtiny series 2, the default for millis() is TCB1. Therefore, the RSBus library
     // defaults to TCB0. Since the serie 2 support CNT on EVENT, we use hardware support.
@@ -159,25 +158,22 @@
     #else
       #if defined(TCB1_CNT)
         #define RSBUS_USES_SW_TCB1    // serie 1
-      #else      
+      #else
         #define RSBUS_USES_SW_TCB0    // serie 0
       #endif
     #endif
-  #endif
 
   // ATMega 640, 1280, 1281, 2560 and 2561:
   // --------------------------------------
   // For ATMega 640, 1280, 1281, 2560 and 2561 the default is a pin interrupt to increment the address
   // being polled (thus a pin interrupt to count the RS-Bus address pulses) and Timer 3
   // (instead of CheckPolling()) to reset the address being polled
-  #if defined(__AVR_ATmega640__)  || defined(__AVR_ATmega1280__) || defined(__AVR_ATmega1281__) || \
+  #elif defined(__AVR_ATmega640__)  || defined(__AVR_ATmega1280__) || defined(__AVR_ATmega1281__) || \
       defined(__AVR_ATmega2560__) || defined(__AVR_ATmega2561__)
       #define RSBUS_USES_SW_T3
-  #endif
 
   // All others, including the ATMega 328 (Aruino UNO)
-  #if !defined(RSBUS_USES_SW_TCB2) && !defined(RSBUS_USES_SW_TCB3) && !defined(RSBUS_USES_RTC) && \
-      !defined(RSBUS_USES_SW_T3)
+  #else
     #define RSBUS_USES_SW
   #endif
 
@@ -226,7 +222,7 @@
 #endif
 
 
- 
+
 // #define RSBUS_USES_SW_T3         // Pin ISR for pulse count, Timer instead of checkPolling()
 // #define RSBUS_USES_SW_T4         // Pin ISR for pulse count, Timer instead of checkPolling()
 // #define RSBUS_USES_SW_T5         // Pin ISR for pulse count, Timer instead of checkPolling()
