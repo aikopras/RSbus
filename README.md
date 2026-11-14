@@ -58,6 +58,7 @@ The RSbusHardware class initialises the USART for sending the RS-bus messages, a
 - #### void attach(uint8_t usartNumber, uint8_t rxPin) ####
 Should be called at the start of the program to select the USART (0...5) and connect the RS-bus Receive pin (Arduino pin number) to the RS-bus Interrupt Service Routine (ISR).
 The attach() functions checks two additional parameters: `interruptModeRising` and `swapUsartPin`.
+If `rxPin` is not a valid pin for the selected variant (for example `PIN_UNDEFINED`, 255), attach() does nothing: no USART, timer or interrupt is claimed. Note that the RTC variant (`RSBUS_USES_RTC`) only accepts PIN_PA0.
 
 - #### void detach(void) ####
 Should be called before of a (soft)reset of the decoder, to stop the ISR.
