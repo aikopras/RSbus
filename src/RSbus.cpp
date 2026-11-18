@@ -12,6 +12,7 @@
 //            2021-09-30 ap v1.0 Different types of hardware are supported
 //            2021-11-29 ap v2.1 Forward Error Correction added (irrespective of transmission errors)
 //            2026-07-27 ap v2.2 util/parity.h replaced to __builtin_parity(value)
+//            2026-11-18 ap v2.3 Fixed bug in parity calculation
 //
 //
 //
@@ -102,11 +103,11 @@ void RSbusConnection::format_nibble(uint8_t value) {
   // Step 1A: set the `type' bit
   if (type == Switch)   {value |= (1<<TT_BIT_0) | (0<<TT_BIT_1);}  // switch decoder with feedback
   if (type == Feedback) {value |= (0<<TT_BIT_0) | (1<<TT_BIT_1);}  // feedback module
-  // Step 1B: Set the parity bit                // 2026-07-27: ap changed
+  // Step 1B: Set the parity bit, such that the total number of 1 bits is odd (odd parity)
   parity = __builtin_parity(value);             // 1 if odd (uneven), 0 if even
   if (parity)
-    {value |= (1 << PARITY);}                   // Sets the bit to 1
-    else {value &= ~(1 << PARITY);}             // Clears the bit to 0
+    {value &= ~(1 << PARITY);}                  // Already odd: clear the parity bit
+    else {value |= (1 << PARITY);}              // Even: set the parity bit
   // Step 2: store the formatted `data byte' into the FIFO queue
   // Data in this queue will later be send (using the USART) from send_nibble().
   my_fifo.push(value);
